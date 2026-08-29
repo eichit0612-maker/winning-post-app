@@ -154,6 +154,7 @@ td.win{color:var(--gold-ink);font-weight:700}
 .note{font-size:12px;color:var(--muted);line-height:1.8;padding:0 4px}
 .dim{opacity:.62;font-size:.88em}
 .gwin{color:var(--gold-ink);font-size:12px}
+td.cond{color:var(--us);font-weight:600}
 .crowns{display:flex;flex-wrap:wrap;gap:4px;margin-top:4px}
 .cr{font-size:10.5px;padding:2px 8px;border-radius:999px;font-weight:700;
   background:var(--eu);color:var(--on-bright);letter-spacing:.02em}
@@ -916,18 +917,19 @@ function viewHorse(name){
 
   if(runs.length){
     s+='<div class="card"><h2>全戦績 '+runs.length+'走</h2><div class="scroll"><table><thead><tr>'
-      +'<th>日付</th><th>場所</th><th>レース名</th><th>格</th><th>馬場</th><th class="num">距離</th>'
+      +'<th>日付</th><th>場所</th><th>レース名</th><th>格</th><th>馬場</th><th>状態</th><th class="num">距離</th>'
       +'<th class="num">人気</th><th class="num">着順</th><th>タイム</th><th>勝ち馬</th>'
       +'<th>騎手</th><th class="num">賞金</th>'
       +'</tr></thead><tbody>';
     let cy=null;
     for(const r of runs){
-      if(r.year!==cy){ cy=r.year; s+='<tr class="ysep"><td colspan="12">'+cy+'年'
+      if(r.year!==cy){ cy=r.year; s+='<tr class="ysep"><td colspan="13">'+cy+'年'
         +(h.birth?'（'+(cy-+h.birth)+'歳）':'')+'</td></tr>'; }
       const t=(r.time||'').replace(/[(（][^)）]*[)）]\s*$/,'');
       s+='<tr><td>'+esc(r.date)+'</td><td>'+esc(r.place.replace('競馬場',''))+'</td>'
         +'<td>'+esc(r.race)+'</td><td>'+gradeTag(r.grade)+'</td>'
-        +'<td>'+esc(r.surface)+esc(r.cond&&r.cond!=='良'?'/'+r.cond:'')+'</td>'
+        +'<td>'+esc(r.surface)+'</td>'
+        +'<td'+(r.cond&&r.cond!=='良'?' class="cond"':'')+'>'+esc(r.cond)+'</td>'
         +'<td class="num">'+(r.dist||'')+'</td><td class="num">'+esc(r.pop)+'</td>'
         +'<td class="num'+(r.rank===1?' win':'')+'">'+(r.rank||'')+'</td>'
         +'<td>'+esc(t)+'</td>'
