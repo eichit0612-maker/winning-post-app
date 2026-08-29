@@ -158,6 +158,8 @@ td.win{color:var(--gold-ink);font-weight:700}
 .cr{font-size:10.5px;padding:2px 8px;border-radius:999px;font-weight:700;
   background:var(--eu);color:#fff;letter-spacing:.02em}
 .tag.c{background:var(--eu);color:#fff}
+.cr.u,.tag.c.u{background:linear-gradient(120deg,var(--jp),var(--eu));
+  box-shadow:0 2px 8px rgba(0,0,0,.18)}
 .chk{display:inline-flex;align-items:center;gap:6px;font-size:13.5px;color:var(--muted);
   padding:7px 12px;border:1px solid var(--line);border-radius:10px;background:var(--panel);cursor:pointer}
 .chk input{accent-color:var(--accent);margin:0}
@@ -229,6 +231,7 @@ const SHEETS = [
 const CACHE_KEY = 'wp-cache-v2';
 const PT_G1 = 20000, PT_JPN1 = 10000;      // 複合スコアの加点（1着）
 const PT_2ND = 10000, PT_3RD = 4000;       // G1での2着・3着の加点（JpnⅠは半分）
+const PT_UNDEFEATED = 20000;               // 無敗での三冠達成への上乗せ
 const OVERSEAS_MIN_G1 = 2, OVERSEAS_MIN_PRIZE = 10000;
 const SPRINT_MAX = 1400;                   // 短距離部門の上限（日本ならスプリンターズS・高松宮記念）
 const ALIAS = { 'ホーメンテスコ':'ホースメンテスコ', '二ホンピロムーテー':'ニホンピロムーテー' };
@@ -504,44 +507,59 @@ const AGE_CATS=[
 ];
 const hasG1 = a => a.g1 + a.jpn1 >= 1;   // 2歳部門・短距離部門の受賞条件
 
-// 三冠・完全制覇の達成判定
+// 三冠・完全制覇の達成判定。デビューから達成までの全戦に敗戦がなければ「無敗」とする
 function computeCrowns(runs){
-  const byHY=new Map();   // 「馬名|年」→ その年の勝ち鞍
-  const byH=new Map();    // 馬名 → レース名 → 最初に勝った年
+  const all=new Map();    // 馬名 → 全出走
+  const byHY=new Map();   // 「馬名|年」→ レース名 → 勝った日付
+  const byH=new Map();    // 馬名 → レース名 → 最初に勝った {year,date}
   for(const r of runs){
+    if(!all.has(r.name)) all.set(r.name,[]);
+    all.get(r.name).push(r);
     if(r.rank!==1) continue;
     const k=r.name+'|'+r.year;
-    if(!byHY.has(k)) byHY.set(k,new Set());
-    byHY.get(k).add(r.race);
+    if(!byHY.has(k)) byHY.set(k,new Map());
+    const my=byHY.get(k);
+    if(!my.has(r.race)||my.get(r.race)>r.date) my.set(r.race,r.date);
     if(!byH.has(r.name)) byH.set(r.name,new Map());
     const m=byH.get(r.name);
-    if(!m.has(r.race)||m.get(r.race)>r.year) m.set(r.race,r.year);
+    if(!m.has(r.race)||m.get(r.race).date>r.date) m.set(r.race,{year:r.year,date:r.date});
   }
+  // その日までに2着以下が一度も無ければ無敗
+  const undefeatedThrough=(name,date)=>
+    !(all.get(name)||[]).some(r=>r.rank>=2 && r.date<=date);
+
   const byHorseYear=new Map(), byHorse=new Map();
   const push=(map,k,v)=>{ if(!map.has(k)) map.set(k,[]); map.get(k).push(v); };
+  const record=(name,year,c,lastDate)=>{
+    const u = c.pt>0 && undefeatedThrough(name,lastDate);   // 加点のある称号のみ無敗を評価
+    const e = { c, year, undefeated:u };
+    push(byHorseYear,name+'|'+year,e); push(byHorse,name,e);
+  };
   for(const c of CROWNS){
     if(c.career){
       for(const [h,m] of byH){
         if(!c.races.every(x=>m.has(x))) continue;
-        const y=Math.max(...c.races.map(x=>m.get(x)));   // 最後の1冠を獲った年
-        push(byHorseYear,h+'|'+y,c); push(byHorse,h,{c,year:y});
+        const legs=c.races.map(x=>m.get(x));
+        const last=legs.reduce((a,b)=>a.date>b.date?a:b);
+        record(h,last.year,c,last.date);
       }
     }else{
-      for(const [k,s] of byHY){
-        if(!c.races.every(x=>s.has(x))) continue;
+      for(const [k,m] of byHY){
+        if(!c.races.every(x=>m.has(x))) continue;
         const i=k.lastIndexOf('|');
-        push(byHorseYear,k,c); push(byHorse,k.slice(0,i),{c,year:+k.slice(i+1)});
+        const lastDate=c.races.map(x=>m.get(x)).sort().pop();
+        record(k.slice(0,i),+k.slice(i+1),c,lastDate);
       }
     }
   }
   for(const v of byHorse.values()) v.sort((a,b)=>a.year-b.year||b.c.pt-a.c.pt);
   return { byHorseYear, byHorse };
 }
-const crownsOf = (name,year) => DB.crowns.byHorseYear.get(name+'|'+year) || [];
-const crownBonus = (name,year) => crownsOf(name,year).reduce((s,c)=>s+c.pt,0);
+const crownPt = e => e.c.pt + (e.undefeated ? PT_UNDEFEATED : 0);
+const crownName = e => (e.undefeated ? '無敗の' : '') + e.c.name;
 
 function computeAwards(horses,runs,years,rivals,crowns){
-  const bonusOf=(n,y)=>(crowns.byHorseYear.get(n+'|'+y)||[]).reduce((s,c)=>s+c.pt,0);
+  const bonusOf=(n,y)=>(crowns.byHorseYear.get(n+'|'+y)||[]).reduce((s,e)=>s+crownPt(e),0);
   const byYear=new Map(), byHorseAward=new Map();
   const note=(e,y,region,cat)=>{
     if(e.rival) return;                    // 他厩舎馬はカルテを持たないので受賞歴を記録しない
@@ -639,7 +657,8 @@ function viewAwards(){
     +'年／'+DB.byHorse.size+'頭・'+num(DB.runs.length)+'走の記録から自動選定。'
     +'複合スコア＝獲得賞金＋G1勝×'+num(PT_G1)+'＋JpnⅠ勝×'+num(PT_JPN1)
     +'＋G1 2着×'+num(PT_2ND)+'＋G1 3着×'+num(PT_3RD)+'（JpnⅠは半分）。'
-    +'三冠・完全制覇の達成にはボーナスを加算（通年成績のみ）。二冠系は称号のみで加点なし。'
+    +'三冠・完全制覇の達成にはボーナスを加算（通年成績のみ）。'
+    +'デビューから達成まで無敗ならさらに'+num(PT_UNDEFEATED)+'加点。二冠系は称号のみで加点なし。'
     +'2歳部門はG1勝ちが必須、短距離部門は'+SPRINT_MAX+'m以下のG1勝ち馬から選定。'
     +'海外部門はG1 '+OVERSEAS_MIN_G1+'勝以上、またはG1 1勝かつ年間賞金'+num(OVERSEAS_MIN_PRIZE)+'以上が条件。'
     +'表彰の対象は所有馬のみです。他厩舎の馬は成績の一部しか判明しないため、各地域の'
@@ -668,7 +687,8 @@ function viewAwards(){
           if(a.wins.length) h+='<div class="g1">'+a.wins.map(w=>esc(w.race)).join('、')+'</div>';
           const cr=DB.crowns.byHorseYear.get(it.win.n+'|'+y)||[];
           if(cr.length) h+='<div class="crowns">'
-            +cr.map(c=>'<span class="cr">'+esc(c.name)+'</span>').join('')+'</div>';
+            +cr.map(e=>'<span class="cr'+(e.undefeated?' u':'')+'">'+esc(crownName(e))+'</span>').join('')
+            +'</div>';
         } else h+='<span class="none">該当なし</span>';
         h+='</dd></dl>';
       }
@@ -705,7 +725,8 @@ function viewHorse(name){
     +(h.status?'<span class="tag">'+esc(h.status)+'</span>':'')
     +(h.region?'<span class="tag">'+esc(h.region)+'</span>':'')
     +aw.filter(a=>a.cat==='最優秀馬').map(a=>'<span class="tag b">'+a.year+' 最優秀馬</span>').join('')
-    +(DB.crowns.byHorse.get(h.name)||[]).map(x=>'<span class="tag c">'+esc(x.c.name)+' '+x.year+'</span>').join('')
+    +(DB.crowns.byHorse.get(h.name)||[]).map(e=>'<span class="tag c'+(e.undefeated?' u':'')+'">'
+        +esc(crownName(e))+' '+e.year+'</span>').join('')
     +'</div></div>';
   s+='<div class="facts">'
     +f('生年',h.birth?h.birth+'年':'—')+f('性別',h.sex)+f('毛色',h.color)
