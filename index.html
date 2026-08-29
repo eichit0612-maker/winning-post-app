@@ -417,7 +417,7 @@ function build(raw){
       grade:r.grade,surface:r.surface,dist:r.dist,mine:[]});
     races.get(k).mine.push(r);
   }
-  const rivals=new Map();   // 「馬名|年」→ その年に判明している他厩舎馬の戦績
+  // 第1段階: 勝ち馬を確定し、自厩舎の2〜5着の賞金から1着賞金を逆算する
   for(const R of races.values()){
     const w=R.mine.find(x=>x.rank===1);
     if(w){ R.winner=w.name; R.owned=true; R.winPrize=w.prize; }
@@ -431,6 +431,29 @@ function build(raw){
       }
     }
     for(const x of R.mine) x.winner=R.winner;
+  }
+  // 第2段階: 自厩舎が6着以下で賞金0だったレースは、同じレースの他年度から1着賞金を推定する
+  const racePrize=new Map();
+  for(const R of races.values()){
+    if(!R.winPrize) continue;
+    if(!racePrize.has(R.race)) racePrize.set(R.race,new Map());
+    const m=racePrize.get(R.race);
+    if(!m.has(R.winPrize)) m.set(R.winPrize,[]);
+    m.get(R.winPrize).push(R.year);
+  }
+  for(const R of races.values()){
+    if(R.winPrize||R.owned||!R.winner) continue;
+    const m=racePrize.get(R.race); if(!m) continue;
+    let best=null;   // 最頻値を優先し、同数なら年が近いもの
+    for(const [p,ys] of m){
+      const near=-Math.min(...ys.map(y=>Math.abs(y-R.year)));
+      if(!best||ys.length>best.n||(ys.length===best.n&&near>best.near)) best={p,n:ys.length,near};
+    }
+    if(best){ R.winPrize=best.p; R.estimated=true; }
+  }
+  // 第3段階: 他厩舎馬の戦績としてまとめる
+  const rivals=new Map();   // 「馬名|年」→ その年に判明している他厩舎馬の戦績
+  for(const R of races.values()){
     if(R.owned||!R.winner) continue;
     const k=R.winner+'|'+R.year;
     if(!rivals.has(k)) rivals.set(k,{name:R.winner,year:R.year,wins:[],regions:{}});
