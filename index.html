@@ -37,7 +37,7 @@ header::after{content:"";display:block;height:3px;
   background:linear-gradient(90deg,var(--jp),var(--gold),var(--accent),var(--us),var(--eu))}
 .hd{max-width:1080px;margin:0 auto;padding:11px 16px;display:flex;gap:14px;align-items:center;flex-wrap:wrap}
 .brand{font-weight:700;font-size:16px;letter-spacing:.04em;white-space:nowrap;color:var(--accent)}
-nav{display:flex;gap:4px}
+nav{display:flex;gap:4px;flex-wrap:wrap}
 nav a{padding:5px 13px;border-radius:999px;font-size:14px;color:var(--muted);transition:.12s}
 nav a:hover{background:var(--panel2);color:var(--ink)}
 nav a.on{background:var(--accent);color:#fff;font-weight:600}
@@ -194,6 +194,8 @@ td.win{color:var(--gold-ink);font-weight:700}
     <a href="#/horses" data-r="horses">馬一覧</a>
     <a href="#/stallions" data-r="stallions">種牡馬</a>
     <a href="#/broodmares" data-r="broodmares">繁殖牝馬</a>
+    <a href="#/jockeys" data-r="jockeys">騎手</a>
+    <a href="#/trainers" data-r="trainers">調教師</a>
   </nav>
   <div class="search">
     <input id="q" type="search" placeholder="馬名で検索…" autocomplete="off">
@@ -348,9 +350,18 @@ function build(raw){
   for(const v of rivals.values())
     v.region=Object.entries(v.regions).sort((a,b)=>b[1]-a[1])[0][0];
 
+  // 騎手（レース結果の騎手欄から）
+  const jockeys=new Map();
+  for(const r of runs){ const k=(r.jockey||'').trim(); if(!k) continue;
+    if(!jockeys.has(k)) jockeys.set(k,[]); jockeys.get(k).push(r); }
+  // 調教師（馬マスタの調教師欄から。管理馬の全戦績を集計する）
+  const trainers=new Map();
+  for(const h of horses.values()){ const k=(h.trainer||'').trim(); if(!k) continue;
+    if(!trainers.has(k)) trainers.set(k,[]); trainers.get(k).push(h); }
+
   const years=[...new Set(runs.map(r=>r.year))].filter(Boolean).sort();
   const awards=computeAwards(horses,runs,years,rivals);
-  return { horses, runs, byHorse, years, awards, rivals, races };
+  return { horses, runs, byHorse, years, awards, rivals, races, jockeys, trainers };
 }
 
 const G = g => (g||'').replace(/[.．]/g,'');
@@ -566,7 +577,7 @@ function viewHorse(name){
     +f('生年',h.birth?h.birth+'年':'—')+f('性別',h.sex)+f('毛色',h.color)
     +f('父',h.sire?hlink(h.sire):'—')+f('母',h.dam?hlink(h.dam):'—')
     +f('母父',bmsOf(h)?hlink(bmsOf(h)):'—')
-    +f('調教師',h.trainer)+f('所属',h.base)
+    +f('調教師',h.trainer?tlink(h.trainer):'—')+f('所属',h.base)
     +(h.retireYear&&h.retireYear!=='-'?f('現役引退',h.retireYear+'年'):'')
     +'</div></div>';
 
@@ -671,7 +682,7 @@ function viewHorse(name){
         +'<td class="num'+(r.rank===1?' win':'')+'">'+(r.rank||'')+'</td>'
         +'<td>'+esc(t)+'</td>'
         +'<td>'+(r.rank===1?'<span class="none">—</span>':(r.winner?hlink(r.winner):''))+'</td>'
-        +'<td>'+esc(r.jockey)+'</td>'
+        +'<td>'+(r.jockey?jlink(r.jockey):'')+'</td>'
         +'<td class="num">'+(r.prize?num(r.prize):'')+'</td></tr>';
     }
     s+='</tbody></table></div></div>';
@@ -796,6 +807,179 @@ function bindBreeding(kind){
   document.getElementById('bonly').onchange=e=>{ f.only=e.target.checked; redraw(); };
 }
 
+/* ============ 画面: 騎手・調教師 ============ */
+const jlink = n => '<a class="link" href="#/jockey/'+encodeURIComponent(n)+'">'+esc(n)+'</a>';
+const tlink = n => '<a class="link" href="#/trainer/'+encodeURIComponent(n)+'">'+esc(n)+'</a>';
+const rate = a => a.n ? Math.round(a.w/a.n*100)+'%' : '';
+const tile = (v,k) => '<div><b>'+v+'</b><span>'+k+'</span></div>';
+// 年度別成績の表
+function yearTable(runsList){
+  const ys=[...new Set(runsList.map(r=>r.year))].sort((a,b)=>b-a);
+  let s='<div class="scroll"><table><thead><tr><th class="num">年</th><th class="num">走</th>'
+    +'<th class="num">勝</th><th class="num">重賞</th><th class="num">G1</th><th class="num">賞金</th>'
+    +'</tr></thead><tbody>';
+  for(const y of ys){ const a=agg(runsList.filter(r=>r.year===y));
+    s+='<tr><td class="num">'+y+'</td><td class="num">'+a.n+'</td>'
+      +'<td class="num'+(a.w?' win':'')+'">'+a.w+'</td><td class="num">'+(a.gr||'')+'</td>'
+      +'<td class="num'+(a.g1+a.jpn1?' win':'')+'">'+((a.g1+a.jpn1)||'')+'</td>'
+      +'<td class="num">'+num(a.prize)+'</td></tr>'; }
+  return s+'</tbody></table></div>';
+}
+// G1・JpnⅠの勝ち鞍一覧
+function bigWinTable(wins,horseCol){
+  if(!wins.length) return '<div class="none">G1勝ちはまだありません。</div>';
+  let s='<div class="scroll"><table><thead><tr><th>日付</th><th>レース名</th><th>格</th>'
+    +(horseCol?'<th>馬名</th>':'')+'<th>場所</th><th class="num">賞金</th></tr></thead><tbody>';
+  for(const w of [...wins].sort((a,b)=>b.date.localeCompare(a.date)))
+    s+='<tr><td>'+esc(w.date)+'</td><td><b>'+esc(w.race)+'</b></td><td>'+gradeTag(w.grade)+'</td>'
+      +(horseCol?'<td>'+hlink(w.name)+'</td>':'')
+      +'<td>'+esc((w.place||'').replace('競馬場',''))+'</td>'
+      +'<td class="num">'+num(w.prize)+'</td></tr>';
+  return s+'</tbody></table></div>';
+}
+
+let PF={ jockeys:{q:'',sort:'w'}, trainers:{q:'',sort:'prize'} };
+
+function viewJockeys(){
+  const f=PF.jockeys;
+  const all=[...DB.jockeys.entries()].map(([n,rs])=>({n,rs,a:agg(rs)}));
+  let h='<h1>騎手成績</h1><div class="sub">'+all.length+'人。所有馬に騎乗した分の集計です。'
+    +'騎手名から個別ページへ移動できます。</div>'
+    +'<div class="filters"><input id="pq" placeholder="騎手名で絞り込み" value="'+esc(f.q)+'">'
+    +'<select id="psort">'
+    +[['w','勝利数順'],['prize','獲得賞金順'],['g1','G1勝ち数順'],['n','騎乗数順'],['name','名前順']]
+      .map(([v,l])=>'<option value="'+v+'"'+(f.sort===v?' selected':'')+'>'+l+'</option>').join('')
+    +'</select></div><div class="card"><div class="scroll">'+table()+'</div></div>';
+  return h;
+  function table(){
+    let list=all.filter(x=>!f.q||x.n.includes(f.q));
+    const key={ w:x=>[-x.a.w,-x.a.prize], prize:x=>[-x.a.prize], n:x=>[-x.a.n],
+                g1:x=>[-(x.a.g1+x.a.jpn1),-x.a.prize], name:x=>[x.n] }[f.sort];
+    list.sort((a,b)=>{ const A=key(a),B=key(b);
+      for(let i=0;i<A.length;i++){ if(A[i]<B[i]) return -1; if(A[i]>B[i]) return 1; } return 0; });
+    if(!list.length) return '<div class="none">該当する騎手がいません。</div>';
+    let s='<table><thead><tr><th>騎手</th><th class="num">騎乗</th><th class="num">1着</th>'
+      +'<th class="num">2着</th><th class="num">3着</th><th class="num">勝率</th>'
+      +'<th class="num">重賞</th><th class="num">G1</th><th class="num">獲得賞金</th></tr></thead><tbody>';
+    for(const {n,a} of list)
+      s+='<tr><td><b>'+jlink(n)+'</b></td><td class="num">'+a.n+'</td>'
+        +'<td class="num'+(a.w?' win':'')+'">'+(a.w||'')+'</td><td class="num">'+(a.p2||'')+'</td>'
+        +'<td class="num">'+(a.p3||'')+'</td><td class="num">'+rate(a)+'</td>'
+        +'<td class="num">'+(a.gr||'')+'</td>'
+        +'<td class="num'+(a.g1+a.jpn1?' win':'')+'">'+((a.g1+a.jpn1)||'')+'</td>'
+        +'<td class="num">'+num(a.prize)+'</td></tr>';
+    return s+'</tbody></table>';
+  }
+}
+
+function viewJockey(name){
+  const rs=DB.jockeys.get(name);
+  if(!rs) return '<h1>該当なし</h1><div class="sub">「'+esc(name)+'」の騎乗記録はありません。</div>';
+  const a=agg(rs);
+  const mounts=new Map();
+  for(const r of rs){ if(!mounts.has(r.name)) mounts.set(r.name,[]); mounts.get(r.name).push(r); }
+  const list=[...mounts.entries()].map(([n,l])=>({n,a:agg(l)}))
+    .sort((x,y)=>y.a.w-x.a.w||y.a.prize-x.a.prize);
+  let s='<div class="card"><div class="hero-h"><div class="name">'+esc(name)+'</div>'
+    +'<div class="tags"><span class="tag">騎手</span></div></div>'
+    +'<div class="stats" style="margin-top:16px">'
+    +tile(a.n,'騎乗')+tile(a.w,'1着')+tile(a.p2,'2着')+tile(a.p3,'3着')
+    +tile(rate(a),'勝率')+tile(a.gr,'重賞勝')+tile(a.g1+a.jpn1,'G1勝')+tile(num(a.prize),'獲得賞金')
+    +'</div></div>';
+  s+='<div class="card"><h2>G1・JpnⅠ勝ち鞍 '+a.wins.length+'勝</h2>'+bigWinTable(a.wins,true)+'</div>';
+  s+='<div class="card"><h2>年度別成績</h2>'+yearTable(rs)+'</div>';
+  s+='<div class="card"><h2>騎乗馬 '+list.length+'頭</h2><div class="scroll"><table><thead><tr>'
+    +'<th>馬名</th><th class="num">騎乗</th><th class="num">1着</th><th class="num">重賞</th>'
+    +'<th class="num">G1</th><th class="num">獲得賞金</th></tr></thead><tbody>';
+  for(const {n,a:m} of list)
+    s+='<tr><td><b>'+hlink(n)+'</b></td><td class="num">'+m.n+'</td>'
+      +'<td class="num'+(m.w?' win':'')+'">'+(m.w||'')+'</td><td class="num">'+(m.gr||'')+'</td>'
+      +'<td class="num'+(m.g1+m.jpn1?' win':'')+'">'+((m.g1+m.jpn1)||'')+'</td>'
+      +'<td class="num">'+num(m.prize)+'</td></tr>';
+  return s+'</tbody></table></div></div>';
+}
+
+function viewTrainers(){
+  const f=PF.trainers;
+  const all=[...DB.trainers.entries()].map(([n,hs])=>{
+    const rs=hs.flatMap(h=>h.runs||[]);
+    return { n, hs, base:hs[0].base||'', ran:hs.filter(h=>h.runs&&h.runs.length).length, a:agg(rs) };
+  });
+  let h='<h1>調教師成績</h1><div class="sub">'+all.length+'人。管理馬の全戦績を集計しています。'
+    +'調教師名から個別ページへ移動できます。</div>'
+    +'<div class="filters"><input id="pq" placeholder="調教師名で絞り込み" value="'+esc(f.q)+'">'
+    +'<select id="psort">'
+    +[['prize','獲得賞金順'],['w','勝利数順'],['g1','G1勝ち数順'],['horses','管理頭数順'],['name','名前順']]
+      .map(([v,l])=>'<option value="'+v+'"'+(f.sort===v?' selected':'')+'>'+l+'</option>').join('')
+    +'</select></div><div class="card"><div class="scroll">'+table()+'</div></div>'
+    +'<div class="note">調教師は馬ごとに1人だけ登録されているため、'
+    +'転厩があった場合も現在の調教師の成績としてまとめて集計されます。</div>';
+  return h;
+  function table(){
+    let list=all.filter(x=>!f.q||x.n.includes(f.q));
+    const key={ prize:x=>[-x.a.prize], w:x=>[-x.a.w,-x.a.prize], horses:x=>[-x.hs.length],
+                g1:x=>[-(x.a.g1+x.a.jpn1),-x.a.prize], name:x=>[x.n] }[f.sort];
+    list.sort((a,b)=>{ const A=key(a),B=key(b);
+      for(let i=0;i<A.length;i++){ if(A[i]<B[i]) return -1; if(A[i]>B[i]) return 1; } return 0; });
+    if(!list.length) return '<div class="none">該当する調教師がいません。</div>';
+    let s='<table><thead><tr><th>調教師</th><th>所属</th><th class="num">管理</th>'
+      +'<th class="num">出走</th><th class="num">走</th><th class="num">勝</th><th class="num">勝率</th>'
+      +'<th class="num">重賞</th><th class="num">G1</th><th class="num">獲得賞金</th></tr></thead><tbody>';
+    for(const x of list)
+      s+='<tr><td><b>'+tlink(x.n)+'</b></td><td>'+esc(x.base)+'</td>'
+        +'<td class="num">'+x.hs.length+'</td><td class="num">'+x.ran+'</td>'
+        +'<td class="num">'+x.a.n+'</td><td class="num'+(x.a.w?' win':'')+'">'+(x.a.w||'')+'</td>'
+        +'<td class="num">'+rate(x.a)+'</td><td class="num">'+(x.a.gr||'')+'</td>'
+        +'<td class="num'+(x.a.g1+x.a.jpn1?' win':'')+'">'+((x.a.g1+x.a.jpn1)||'')+'</td>'
+        +'<td class="num">'+num(x.a.prize)+'</td></tr>';
+    return s+'</tbody></table>';
+  }
+}
+
+function viewTrainer(name){
+  const hs=DB.trainers.get(name);
+  if(!hs) return '<h1>該当なし</h1><div class="sub">「'+esc(name)+'」は登録されていません。</div>';
+  const rs=hs.flatMap(h=>h.runs||[]);
+  const a=agg(rs);
+  let s='<div class="card"><div class="hero-h"><div class="name">'+esc(name)+'</div>'
+    +'<div class="tags"><span class="tag">調教師</span>'
+    +(hs[0].base?'<span class="tag">'+esc(hs[0].base)+'</span>':'')+'</div></div>'
+    +'<div class="stats" style="margin-top:16px">'
+    +tile(hs.length,'管理馬')+tile(a.n,'出走')+tile(a.w,'1着')+tile(a.p2,'2着')
+    +tile(rate(a),'勝率')+tile(a.gr,'重賞勝')+tile(a.g1+a.jpn1,'G1勝')+tile(num(a.prize),'獲得賞金')
+    +'</div></div>';
+  s+='<div class="card"><h2>G1・JpnⅠ勝ち鞍 '+a.wins.length+'勝</h2>'+bigWinTable(a.wins,true)+'</div>';
+  if(a.n) s+='<div class="card"><h2>年度別成績</h2>'+yearTable(rs)+'</div>';
+  s+='<div class="card"><h2>管理馬 '+hs.length+'頭</h2><div class="scroll"><table><thead><tr>'
+    +'<th>馬名</th><th class="num">生年</th><th>性</th><th>父</th><th>母</th><th>状態</th>'
+    +'<th>戦績</th><th class="num">獲得賞金</th><th>主な勝ち鞍</th></tr></thead><tbody>';
+  for(const x of [...hs].sort((p,q)=>(q.birth||'').localeCompare(p.birth||''))){
+    const t=x.total;
+    s+='<tr><td><b>'+hlink(x.name)+'</b></td><td class="num">'+esc(x.birth||'')+'</td>'
+      +'<td>'+esc(x.sex||'')+'</td><td>'+(x.sire?hlink(x.sire):'')+'</td>'
+      +'<td>'+(x.dam?hlink(x.dam):'')+'</td><td>'+esc(x.status||'')+'</td>'
+      +'<td>'+(t?t.n+'戦'+t.w+'勝'+(t.g1+t.jpn1?' <span class="gr g1">G1 '+(t.g1+t.jpn1)+'</span>':'')
+                :'<span class="none">未出走</span>')+'</td>'
+      +'<td class="num">'+(t&&t.prize?num(t.prize):'')+'</td>'
+      +'<td>'+(t&&t.wins.length?'<span class="gwin">'+t.wins.map(w=>esc(w.race)).join('、')+'</span>':'')+'</td>'
+      +'</tr>';
+  }
+  return s+'</tbody></table></div></div>';
+}
+
+function bindPeople(kind){
+  const f=PF[kind];
+  const redraw=()=>{
+    document.getElementById('app').innerHTML = kind==='jockeys'?viewJockeys():viewTrainers();
+    bindPeople(kind);
+    const i=document.getElementById('pq');
+    if(i&&f.q){ i.focus(); i.setSelectionRange(i.value.length,i.value.length); }
+  };
+  const q=document.getElementById('pq'); if(!q) return;
+  q.oninput=e=>{ f.q=e.target.value; redraw(); };
+  document.getElementById('psort').onchange=e=>{ f.sort=e.target.value; redraw(); };
+}
+
 /* ============ ルーター ============ */
 function render(){
   if(!DB) return;
@@ -806,6 +990,10 @@ function render(){
   else if(hash.startsWith('#/horses')){ app.innerHTML=viewHorses(); bindHorses(); route='horses'; }
   else if(hash.startsWith('#/stallions')){ app.innerHTML=viewBreeding('stallions'); bindBreeding('stallions'); route='stallions'; }
   else if(hash.startsWith('#/broodmares')){ app.innerHTML=viewBreeding('broodmares'); bindBreeding('broodmares'); route='broodmares'; }
+  else if(hash.startsWith('#/jockey/')){ app.innerHTML=viewJockey(decodeURIComponent(hash.slice(9))); route='jockeys'; }
+  else if(hash.startsWith('#/jockeys')){ app.innerHTML=viewJockeys(); bindPeople('jockeys'); route='jockeys'; }
+  else if(hash.startsWith('#/trainer/')){ app.innerHTML=viewTrainer(decodeURIComponent(hash.slice(10))); route='trainers'; }
+  else if(hash.startsWith('#/trainers')){ app.innerHTML=viewTrainers(); bindPeople('trainers'); route='trainers'; }
   else { app.innerHTML=viewAwards(); }
   document.querySelectorAll('nav a').forEach(a=>a.classList.toggle('on',a.dataset.r===route));
   window.scrollTo(0,0);
