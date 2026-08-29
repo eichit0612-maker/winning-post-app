@@ -8,7 +8,7 @@
 <style>
 :root{
   --bg:#eef5f1; --panel:#fff; --panel2:#f4faf7; --line:#dae7e0;
-  --ink:#1a2b23; --muted:#55685c;
+  --ink:#16261e; --muted:#4a5b51;
   --accent:#0f7a4c; --accent-soft:#ddf3e8;
   --gold:#c08a08; --gold-ink:#8a6205; --gold-soft:#fff2ce;
   --jp:#d43f38; --us:#2166cf; --eu:#7a4bc6;
@@ -16,7 +16,7 @@
 }
 :root[data-theme="dark"]{
   --bg:#151c19; --panel:#1e2723; --panel2:#26312c; --line:#33413a;
-  --ink:#e9f2ec; --muted:#93a89b;
+  --ink:#eef5f0; --muted:#a1b5a8;
   --accent:#4ecb8d; --accent-soft:#1c3329;
   --gold:#e8bd4d; --gold-ink:#e8bd4d; --gold-soft:#3a3013;
   --jp:#ff8179; --us:#79adf8; --eu:#b892f2;
@@ -181,6 +181,65 @@ td.win{color:var(--gold-ink);font-weight:700}
 .spin{width:28px;height:28px;border:3px solid var(--accent-soft);border-top-color:var(--accent);
   border-radius:50%;animation:sp .8s linear infinite;margin:0 auto 14px}
 @keyframes sp{to{transform:rotate(360deg)}}
+
+/* ---- 主な実績 ---- */
+.card.ach{border:1px solid var(--gold)}
+.ach-crowns{display:flex;flex-wrap:wrap;gap:8px}
+.crown-big{display:inline-flex;align-items:center;gap:9px;font-size:14px;font-weight:700;
+  padding:7px 9px 7px 15px;border-radius:999px;color:#fff;
+  background:linear-gradient(120deg,var(--gold),#e0ae35);box-shadow:0 2px 10px rgba(192,138,8,.3)}
+.crown-big b{font-size:12.5px;background:rgba(255,255,255,.26);padding:1px 9px;border-radius:999px}
+.crown-big.u{background:linear-gradient(120deg,#b23a30,var(--eu));box-shadow:0 2px 10px rgba(122,75,198,.32)}
+:root[data-theme="dark"] .crown-big{color:#16150f}
+:root[data-theme="dark"] .crown-big b{background:rgba(0,0,0,.18)}
+:root[data-theme="dark"] .crown-big.u{color:#fff}
+:root[data-theme="dark"] .crown-big.u b{background:rgba(255,255,255,.24)}
+.ach-awards{display:flex;flex-wrap:wrap;gap:7px}
+.aw-pill{font-size:13px;padding:5px 13px;border-radius:999px;border:1px solid var(--line);
+  background:var(--panel2);transition:.12s}
+.aw-pill:hover{border-color:var(--accent);color:var(--accent);background:var(--accent-soft)}
+.aw-pill.best{background:var(--gold-soft);border-color:var(--gold);color:var(--gold-ink);font-weight:700}
+
+/* ---- 「年度表彰とは」 ---- */
+.about{background:var(--panel);border-radius:14px;box-shadow:var(--shadow);margin:0 0 22px;overflow:hidden}
+.about>summary{padding:12px 18px;cursor:pointer;font-size:14px;font-weight:700;
+  color:var(--accent);list-style:none}
+.about>summary::-webkit-details-marker{display:none}
+.about>summary::before{content:"▸ ";font-size:11px}
+.about[open]>summary::before{content:"▾ "}
+.about>summary:hover{background:var(--panel2)}
+.about-body{padding:2px 18px 16px;font-size:13.5px;border-top:1px solid var(--line)}
+.about-body h4{margin:15px 0 6px;font-size:12px;letter-spacing:.08em;color:var(--accent)}
+.about-body p{margin:12px 0 0}
+.about-body ul{margin:0;padding-left:1.3em}
+.about-body li{margin:4px 0}
+
+/* ---- PC表示は全体的に一回り大きく ---- */
+@media(min-width:641px){
+  body{font-size:16px}
+  h1{font-size:29px} .sub{font-size:14.5px}
+  .brand{font-size:17.5px} nav a{font-size:15px} .status{font-size:13px}
+  .search input{width:215px;font-size:15px} .sug a{font-size:15px}
+  .yr>summary{font-size:23px} .yr>summary .top{font-size:15.5px} .yr>summary .meta{font-size:13px}
+  .reg h3{font-size:13px}
+  .aw{font-size:15px} .aw dt{font-size:13px} .aw .rec{font-size:13px} .aw .g1{font-size:13px}
+  .aw.hero .who{font-size:19px} .cr{font-size:12px} .ext{font-size:11.5px}
+  .rivals>summary{font-size:13px} .rrow{font-size:13.5px} .rrow span,.rrow em{font-size:12.5px}
+  .card h2{font-size:13px} .hero-h .name{font-size:34px} .tag{font-size:12.5px}
+  .facts div{font-size:15.5px} .facts span{font-size:12px}
+  .stats b{font-size:27px} .stats span{font-size:12.5px}
+  table{font-size:14.5px} th{font-size:12.5px} .gr{font-size:12px}
+  .ped{font-size:14px} .rel a,.rel span.p{font-size:14px}
+  .filters select,.filters input,.chk{font-size:14.5px}
+  .hcard .n{font-size:16.5px} .hcard .m{font-size:12.5px} .hcard .r{font-size:12.5px}
+  .none{font-size:14px} .lbl{font-size:12px} .gwin{font-size:13px} .note{font-size:13px}
+  .about>summary{font-size:15px} .about-body{font-size:14.5px}
+  .crown-big{font-size:15px} .crown-big b{font-size:13px} .aw-pill{font-size:14px}
+}
+@media(max-width:640px){
+  .crown-big{font-size:12.5px;padding:6px 8px 6px 12px} .crown-big b{font-size:11px}
+  .aw-pill{font-size:12px}
+}
 @media(max-width:640px){
   .hd{padding:9px 12px} .search{width:100%;margin-left:0;order:9} .search input{width:100%}
   .status{margin-left:auto} main{padding:18px 12px 60px}
@@ -677,15 +736,25 @@ const gradeTag = g => { const t=G(g); if(!t) return '';
 function viewAwards(){
   const A=DB.awards, ys=[...DB.years].reverse();
   let h='<h1>年度表彰</h1><div class="sub">'+DB.years[0]+'〜'+DB.years[DB.years.length-1]
-    +'年／'+DB.byHorse.size+'頭・'+num(DB.runs.length)+'走の記録から自動選定。'
-    +'複合スコア＝獲得賞金＋G1勝×'+num(PT_G1)+'＋JpnⅠ勝×'+num(PT_JPN1)
-    +'＋G1 2着×'+num(PT_2ND)+'＋G1 3着×'+num(PT_3RD)+'（JpnⅠは半分）。'
-    +'三冠・完全制覇の達成にはボーナスを加算（通年成績のみ）。'
-    +'デビューから達成まで無敗ならさらに'+num(PT_UNDEFEATED)+'加点。二冠系は称号のみで加点なし。'
-    +'2歳部門はG1勝ちが必須、短距離部門は'+SPRINT_MAX+'m以下のG1勝ち馬から選定。'
-    +'海外部門はG1 '+OVERSEAS_MIN_G1+'勝以上、またはG1 1勝かつ年間賞金'+num(OVERSEAS_MIN_PRIZE)+'以上が条件。'
-    +'表彰の対象は所有馬のみです。他厩舎の馬は成績の一部しか判明しないため、各地域の'
-    +'「他厩舎のG1勝ち馬」に参考として掲載しています。</div>';
+    +'年／'+DB.byHorse.size+'頭・'+num(DB.runs.length)+'走の記録から自動選定しています。</div>'
+    +'<details class="about"><summary>年度表彰とは</summary><div class="about-body">'
+    +'<p>エアリス牧場の<b>所有馬</b>を対象に、1年ごとの成績を複合スコアで比較して各部門の最優秀馬を選びます。'
+    +'他厩舎の馬は成績の一部しか判明しないため選考には含めず、各地域の'
+    +'「他厩舎のG1勝ち馬」に参考として掲載しています。</p>'
+    +'<h4>複合スコア</h4><ul>'
+    +'<li>獲得賞金</li>'
+    +'<li>G1勝ち × '+num(PT_G1)+'　／　JpnⅠ勝ち × '+num(PT_JPN1)+'</li>'
+    +'<li>G1 2着 × '+num(PT_2ND)+'　／　G1 3着 × '+num(PT_3RD)+'（JpnⅠは半分）</li>'
+    +'<li>三冠・完全制覇のボーナス（通年成績にのみ加算。重複達成は合算）</li>'
+    +'<li>デビューから達成まで無敗ならさらに +'+num(PT_UNDEFEATED)+'</li>'
+    +'</ul><h4>各部門の条件</h4><ul>'
+    +'<li><b>最優秀馬</b> … G1（またはJpnⅠ）を1勝以上</li>'
+    +'<li><b>2歳部門</b> … G1勝ちが必須</li>'
+    +'<li><b>3歳・4歳上部門</b> … 1勝以上</li>'
+    +'<li><b>最優秀短距離馬</b> … '+SPRINT_MAX+'m以下のG1勝ち馬から選定</li>'
+    +'<li><b>最優秀ダートホース</b> … 日本とアメリカのみ</li>'
+    +'<li><b>海外部門</b> … G1 '+OVERSEAS_MIN_G1+'勝以上、またはG1 1勝かつ年間賞金'+num(OVERSEAS_MIN_PRIZE)+'以上</li>'
+    +'</ul></div></details>';
   for(const y of ys){
     const d=A.byYear.get(y);
     const tops=REGIONS.map(r=>{ const c=d.regs[r].list.find(x=>x.cat==='最優秀馬'); return c&&c.win?c.win.n:null; })
@@ -747,9 +816,6 @@ function viewHorse(name){
   let s='<div class="card"><div class="hero-h"><div class="name">'+esc(h.name)+'</div><div class="tags">'
     +(h.status?'<span class="tag">'+esc(h.status)+'</span>':'')
     +(h.region?'<span class="tag">'+esc(h.region)+'</span>':'')
-    +aw.filter(a=>a.cat==='最優秀馬').map(a=>'<span class="tag b">'+a.year+' 最優秀馬</span>').join('')
-    +(DB.crowns.byHorse.get(h.name)||[]).map(e=>'<span class="tag c'+(e.undefeated?' u':'')+'">'
-        +esc(crownName(e))+' '+e.year+'</span>').join('')
     +'</div></div>';
   s+='<div class="facts">'
     +f('生年',h.birth?h.birth+'年':'—')+f('性別',h.sex)+f('毛色',h.color)
@@ -759,16 +825,26 @@ function viewHorse(name){
     +(h.retireYear&&h.retireYear!=='-'?f('現役引退',h.retireYear+'年'):'')
     +'</div></div>';
 
+  // 主な実績（称号と年度表彰）
+  const crowns=DB.crowns.byHorse.get(h.name)||[];
+  if(crowns.length||aw.length){
+    s+='<div class="card ach"><h2>主な実績</h2>';
+    if(crowns.length) s+='<div class="ach-crowns">'
+      +crowns.map(e=>'<span class="crown-big'+(e.undefeated?' u':'')+'">'
+        +esc(crownName(e))+'<b>'+e.year+'</b></span>').join('')+'</div>';
+    if(aw.length) s+='<div class="lbl" style="margin-top:'+(crowns.length?'14px':'0')+'">年度表彰</div>'
+      +'<div class="ach-awards">'
+      +aw.map(a=>'<a class="aw-pill'+(a.cat==='最優秀馬'?' best':'')+'" href="#/awards">'
+        +a.year+' <span class="dim">'+esc(a.region)+'</span> '+esc(a.cat)+'</a>').join('')
+      +'</div>';
+    s+='</div>';
+  }
+
   if(runs.length){
     s+='<div class="card"><h2>通算成績</h2><div class="stats">'
       +st(t.n,'出走')+st(t.w,'勝')+st(t.p2,'2着')+st(t.p3,'3着')
       +st(t.g1+t.jpn1,'G1勝')+st(t.gr,'重賞勝')
       +st(num(t.prize),'獲得賞金')+st((t.n?Math.round(t.w/t.n*100):0)+'%','勝率')
-      +'</div></div>';
-  }
-  if(aw.length){
-    s+='<div class="card"><h2>受賞歴</h2><div class="rel">'
-      +aw.map(a=>'<a href="#/awards">'+a.year+' '+esc(a.region)+' '+esc(a.cat)+'</a>').join('')
       +'</div></div>';
   }
 
