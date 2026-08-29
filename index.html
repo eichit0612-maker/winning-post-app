@@ -1,0 +1,696 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>エアリス牧場 年史</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🏇</text></svg>">
+<style>
+:root{
+  --bg:#f7f5f0; --panel:#fff; --line:#e2ddd2; --ink:#25211c; --muted:#7d7568;
+  --accent:#8a6d3b; --accent-soft:#f0e7d6; --gold:#b8860b;
+  --jp:#b03a3a; --us:#2f6fa8; --eu:#3d7a55;
+  --shadow:0 1px 3px rgba(0,0,0,.06),0 8px 24px rgba(0,0,0,.04);
+}
+@media (prefers-color-scheme:dark){
+  :root{
+    --bg:#16150f; --panel:#1e1c16; --line:#332f25; --ink:#ece7dc; --muted:#9a9184;
+    --accent:#c9a86a; --accent-soft:#2a2519; --gold:#d4af57;
+    --jp:#e07a7a; --us:#7fb3e0; --eu:#7fc79b;
+    --shadow:0 1px 3px rgba(0,0,0,.4),0 8px 24px rgba(0,0,0,.3);
+  }
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);
+  font-family:"Hiragino Kaku Gothic ProN","Yu Gothic",YuGothic,Meiryo,system-ui,sans-serif;
+  line-height:1.7;-webkit-text-size-adjust:100%}
+a{color:inherit;text-decoration:none}
+a.link{color:var(--accent);text-decoration:underline;text-underline-offset:2px;text-decoration-thickness:1px}
+a.link:hover{opacity:.7}
+
+header{position:sticky;top:0;z-index:20;background:var(--panel);border-bottom:1px solid var(--line);
+  box-shadow:0 1px 0 rgba(0,0,0,.02)}
+.hd{max-width:1080px;margin:0 auto;padding:10px 16px;display:flex;gap:14px;align-items:center;flex-wrap:wrap}
+.brand{font-weight:700;font-size:16px;letter-spacing:.04em;white-space:nowrap}
+nav{display:flex;gap:4px}
+nav a{padding:5px 12px;border-radius:999px;font-size:14px;color:var(--muted)}
+nav a.on{background:var(--accent-soft);color:var(--accent);font-weight:600}
+.search{margin-left:auto;position:relative}
+.search input{width:190px;padding:6px 11px;border:1px solid var(--line);border-radius:999px;
+  background:var(--bg);color:var(--ink);font-size:14px;font-family:inherit}
+.search input:focus{outline:2px solid var(--accent-soft);border-color:var(--accent)}
+.sug{position:absolute;top:110%;right:0;width:260px;background:var(--panel);border:1px solid var(--line);
+  border-radius:10px;box-shadow:var(--shadow);overflow:hidden;max-height:320px;overflow-y:auto}
+.sug a{display:block;padding:7px 12px;font-size:14px;border-bottom:1px solid var(--line)}
+.sug a:last-child{border-bottom:0}
+.sug a:hover{background:var(--accent-soft)}
+.sug small{color:var(--muted);margin-left:6px}
+
+main{max-width:1080px;margin:0 auto;padding:22px 16px 80px}
+h1{font-size:23px;margin:0 0 4px;letter-spacing:.03em}
+.sub{color:var(--muted);font-size:13px;margin-bottom:24px}
+.status{font-size:12px;color:var(--muted);margin-left:auto;white-space:nowrap}
+
+/* ---- 年度表彰 ---- */
+.yr{background:var(--panel);border:1px solid var(--line);border-radius:14px;
+  margin-bottom:18px;overflow:hidden;box-shadow:var(--shadow)}
+.yr>summary{padding:13px 18px;cursor:pointer;display:flex;align-items:baseline;gap:12px;
+  font-weight:700;font-size:19px;list-style:none}
+.yr>summary::-webkit-details-marker{display:none}
+.yr>summary::before{content:"▸";color:var(--muted);font-size:13px;transition:transform .15s}
+.yr[open]>summary::before{transform:rotate(90deg)}
+.yr>summary .meta{font-weight:400;font-size:12px;color:var(--muted);margin-left:auto}
+.yr>summary .top{font-weight:600;font-size:14px;color:var(--gold)}
+.regions{display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:1px;
+  background:var(--line);border-top:1px solid var(--line)}
+.reg{background:var(--panel);padding:14px 18px 18px}
+.reg h3{margin:0 0 10px;font-size:13px;letter-spacing:.1em;display:flex;align-items:center;gap:7px}
+.reg h3::before{content:"";width:9px;height:9px;border-radius:50%;background:currentColor}
+.reg.日本 h3{color:var(--jp)} .reg.アメリカ h3{color:var(--us)} .reg.欧州 h3{color:var(--eu)}
+.reg h3 span{color:var(--muted);font-weight:400;letter-spacing:0}
+.aw{display:grid;grid-template-columns:6.5em 1fr;gap:2px 10px;font-size:13.5px;padding:5px 0;
+  border-bottom:1px dashed var(--line)}
+.aw:last-child{border-bottom:0}
+.aw.hero{background:linear-gradient(90deg,var(--accent-soft),transparent);
+  margin:0 -8px 4px;padding:7px 8px;border-radius:7px;border-bottom:0}
+.aw dt{color:var(--muted);font-size:11.5px;padding-top:3px}
+.aw.hero dt{color:var(--accent);font-weight:700}
+.aw .who{font-weight:600}
+.aw.hero .who{font-size:16px}
+.aw .rec{font-size:11.5px;color:var(--muted);font-variant-numeric:tabular-nums}
+.aw .g1{font-size:11.5px;color:var(--gold);margin-top:1px}
+.none{color:var(--muted);font-size:13px;opacity:.65}
+.ext{font-size:10px;margin-left:6px;padding:1px 6px;border-radius:4px;
+  background:var(--line);color:var(--muted);font-weight:400;vertical-align:middle}
+.rivals{margin-top:10px;border-top:1px solid var(--line);padding-top:8px}
+.rivals>summary{cursor:pointer;font-size:11.5px;color:var(--muted);list-style:none}
+.rivals>summary::-webkit-details-marker{display:none}
+.rivals>summary::before{content:"▸ ";font-size:9px}
+.rivals[open]>summary::before{content:"▾ "}
+.rrow{font-size:12px;padding:5px 0;border-bottom:1px dashed var(--line)}
+.rrow:last-child{border-bottom:0}
+.rrow b{font-weight:600}
+.rrow span{color:var(--muted);margin-left:8px;font-size:11px}
+.rrow em{display:block;font-style:normal;color:var(--gold);font-size:11px}
+
+/* ---- カルテ ---- */
+.card{background:var(--panel);border:1px solid var(--line);border-radius:14px;
+  padding:20px;margin-bottom:16px;box-shadow:var(--shadow)}
+.card h2{margin:0 0 14px;font-size:14px;letter-spacing:.1em;color:var(--muted);font-weight:600}
+.hero-h{display:flex;flex-wrap:wrap;align-items:flex-end;gap:10px 16px;margin-bottom:6px}
+.hero-h .name{font-size:30px;font-weight:700;letter-spacing:.02em;line-height:1.2}
+.tags{display:flex;gap:6px;flex-wrap:wrap}
+.tag{font-size:11.5px;padding:2px 9px;border-radius:999px;background:var(--accent-soft);color:var(--accent)}
+.tag.b{background:var(--gold);color:#fff}
+@media (prefers-color-scheme:dark){.tag.b{color:#16150f}}
+.facts{display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:12px;margin-top:14px}
+.facts div{font-size:14px}
+.facts span{display:block;font-size:11px;color:var(--muted);letter-spacing:.06em}
+.stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(88px,1fr));gap:10px;text-align:center}
+.stats div{padding:10px 4px;background:var(--bg);border-radius:9px}
+.stats b{display:block;font-size:21px;font-variant-numeric:tabular-nums;line-height:1.3}
+.stats span{font-size:11px;color:var(--muted)}
+
+table{width:100%;border-collapse:collapse;font-size:13px}
+.scroll{overflow-x:auto;-webkit-overflow-scrolling:touch}
+th{text-align:left;font-size:11px;color:var(--muted);font-weight:600;letter-spacing:.05em;
+  padding:5px 8px;border-bottom:1px solid var(--line);white-space:nowrap}
+td{padding:6px 8px;border-bottom:1px solid var(--line);white-space:nowrap}
+tbody tr:hover{background:var(--accent-soft)}
+.num{text-align:right;font-variant-numeric:tabular-nums}
+.win{color:var(--gold);font-weight:700}
+.gr{font-size:10.5px;padding:1px 6px;border-radius:4px;background:var(--accent-soft);color:var(--accent)}
+.gr.g1{background:var(--gold);color:#fff}
+@media (prefers-color-scheme:dark){.gr.g1{color:#16150f}}
+.ysep td{background:var(--bg);font-weight:700;font-size:12px;color:var(--muted);padding:4px 8px}
+
+.ped{display:grid;grid-template-columns:repeat(3,1fr);gap:3px;font-size:12.5px}
+.pcol{display:grid;gap:3px;grid-auto-rows:1fr}
+.pcol>div{background:var(--bg);border-radius:6px;padding:6px 9px;display:flex;align-items:center;
+  min-height:32px;overflow:hidden;white-space:nowrap;text-overflow:ellipsis}
+.pcol .s{border-left:3px solid var(--us)}
+.pcol .d{border-left:3px solid var(--jp)}
+.pcol .q{color:var(--muted);opacity:.4}
+
+.rel{display:flex;flex-wrap:wrap;gap:7px}
+.rel a{font-size:13px;padding:4px 11px;border:1px solid var(--line);border-radius:999px;background:var(--bg)}
+.rel a:hover{border-color:var(--accent);color:var(--accent)}
+
+/* ---- 一覧 ---- */
+.filters{display:flex;gap:7px;flex-wrap:wrap;margin-bottom:14px}
+.filters select,.filters input{padding:6px 11px;border:1px solid var(--line);border-radius:8px;
+  background:var(--panel);color:var(--ink);font-size:13.5px;font-family:inherit}
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(215px,1fr));gap:9px}
+.hcard{background:var(--panel);border:1px solid var(--line);border-radius:11px;padding:11px 13px;
+  display:block;transition:border-color .12s}
+.hcard:hover{border-color:var(--accent)}
+.hcard .n{font-weight:600;font-size:14.5px}
+.hcard .m{font-size:11.5px;color:var(--muted);margin-top:2px}
+.hcard .r{font-size:11.5px;color:var(--gold);margin-top:3px;font-variant-numeric:tabular-nums}
+.loading{text-align:center;padding:70px 20px;color:var(--muted)}
+.spin{width:26px;height:26px;border:2.5px solid var(--line);border-top-color:var(--accent);
+  border-radius:50%;animation:sp .8s linear infinite;margin:0 auto 14px}
+@keyframes sp{to{transform:rotate(360deg)}}
+@media(max-width:640px){
+  .hd{padding:9px 12px} .search{width:100%;margin-left:0} .search input{width:100%}
+  main{padding:16px 12px 60px} .hero-h .name{font-size:24px}
+  .ped{grid-template-columns:repeat(2,1fr);font-size:11.5px} .pcol.c3{display:none}
+}
+</style>
+</head>
+<body>
+<header><div class="hd">
+  <span class="brand">🏇 エアリス牧場 年史</span>
+  <nav>
+    <a href="#/awards" data-r="awards">年度表彰</a>
+    <a href="#/horses" data-r="horses">馬一覧</a>
+  </nav>
+  <div class="search">
+    <input id="q" type="search" placeholder="馬名で検索…" autocomplete="off">
+    <div id="sug" class="sug" hidden></div>
+  </div>
+  <span class="status" id="status"></span>
+</div></header>
+<main id="app"><div class="loading"><div class="spin"></div>読み込み中…</div></main>
+
+<script>
+'use strict';
+/* ============ 設定 ============ */
+const SHEET_ID = '11lAW1NIhmA8n7Lxch20USaVKQOpNlmnLx7IutnsJ6sM';
+const SHEETS = [
+  { key:'active',    gid:0 },
+  { key:'retired',   gid:1637103436 },
+  { key:'broodmare', gid:482152832, tq:'select * where B is not null' },
+  { key:'stallion',  gid:495363124, tq:'select * where B is not null' },
+  { key:'results',   gid:1732161958 },
+  { key:'form',      gid:1758942740 },
+];
+const CACHE_KEY = 'wp-cache-v1';
+const PT_G1 = 20000, PT_JPN1 = 10000;      // 複合スコアの加点
+const OVERSEAS_MIN_G1 = 2, OVERSEAS_MIN_PRIZE = 10000;
+const SPRINT_MAX = 1400;                   // 短距離部門の上限（日本ならスプリンターズS・高松宮記念）
+const ALIAS = { 'ホーメンテスコ':'ホースメンテスコ', '二ホンピロムーテー':'ニホンピロムーテー' };
+const REGION_OF = { '栗東':'日本','美浦':'日本','アメリカ':'アメリカ',
+                    'イギリス':'欧州','フランス':'欧州','アイルランド':'欧州' };
+const REGIONS = ['日本','アメリカ','欧州'];
+const HAS_DIRT = { '日本':true, 'アメリカ':true, '欧州':false };
+// 着順別の賞金率（1着賞金に対する割合）。地方交流(JpnⅠ〜Ⅲ)は別レート
+const RATE = { n:{2:.40,3:.25,4:.15,5:.10}, j:{2:.35,3:.20,4:.10,5:.05} };
+const JP_TRACKS = /^(中山|東京|京都|阪神|中京|新潟|福島|小倉|函館|札幌|大井|川崎|船橋|浦和|門別|盛岡|名古屋|園田|金沢|佐賀)/;
+const US_TRACKS = /^(アケダクト|ウッドバイン|オークローンパーク|ガルフストリームパーク|キーンランド|サラトガ|サンタアニタ|チャーチルダウンズ|デルマー|ピムリコ|フェアグラウンズ|ベルモントパーク|モンマスパーク|ロスアラミトス)/;
+const venueRegion = p => JP_TRACKS.test(p) ? '日本' : US_TRACKS.test(p) ? 'アメリカ' : '欧州';
+
+/* ============ 取得 ============ */
+function parseCSV(text){
+  const rows=[]; let row=[],f='',q=false;
+  for(let i=0;i<text.length;i++){
+    const c=text[i];
+    if(q){ if(c==='"'){ if(text[i+1]==='"'){f+='"';i++;} else q=false; } else f+=c; }
+    else if(c==='"') q=true;
+    else if(c===',') { row.push(f); f=''; }
+    else if(c==='\n'){ row.push(f); rows.push(row); row=[]; f=''; }
+    else if(c!=='\r') f+=c;
+  }
+  if(f||row.length){ row.push(f); rows.push(row); }
+  if(!rows.length) return [];
+  const head=rows.shift().map(h=>h.trim());
+  return rows.map(r=>{ const o={}; head.forEach((h,i)=>{ if(h) o[h]=(r[i]||'').trim(); }); return o; })
+             .filter(o=>Object.values(o).some(v=>v!==''));
+}
+function sheetURL(s){
+  const u=new URL('https://docs.google.com/spreadsheets/d/'+SHEET_ID+'/gviz/tq');
+  u.searchParams.set('tqx','out:csv');
+  u.searchParams.set('gid',String(s.gid));
+  if(s.tq) u.searchParams.set('tq',s.tq);
+  return u;
+}
+async function fetchAll(){
+  const texts = await Promise.all(SHEETS.map(s=>fetch(sheetURL(s)).then(r=>{
+    if(!r.ok) throw new Error(s.key+': HTTP '+r.status); return r.text();
+  })));
+  const out={}; SHEETS.forEach((s,i)=>out[s.key]=texts[i]); return out;
+}
+
+/* ============ モデル構築 ============ */
+const nm = n => ALIAS[n] || n;
+let DB = null;
+
+function build(raw){
+  const d={}; for(const s of SHEETS) d[s.key]=parseCSV(raw[s.key]);
+
+  const horses=new Map();
+  const get=n=>{ const k=nm((n||'').trim()); if(!k) return null;
+    if(!horses.has(k)) horses.set(k,{name:k,children:[]}); return horses.get(k); };
+
+  for(const r of d.form){ const h=get(r['馬名']); if(!h) continue;
+    h.birth=h.birth||r['生年']; h.color=h.color||r['毛色']; h.sex=h.sex||r['性別'];
+    h.sire=h.sire||r['父']; h.dam=h.dam||r['母'];
+    h.trainer=h.trainer||r['調教師']; h.base=h.base||r['所属']; }
+  for(const r of d.active){ const h=get(r['馬名']); if(!h) continue;
+    h.id=r['ID']; h.birth=r['生年']||h.birth; h.color=r['毛色']||h.color; h.sex=r['性別']||h.sex;
+    h.sire=r['父']||h.sire; h.dam=r['母']||h.dam;
+    h.trainer=r['調教師']||h.trainer; h.base=r['所属']||h.base; h.status='現役'; }
+  for(const r of d.retired){ const h=get(r['馬名']); if(!h) continue;
+    h.id=r['ID']; h.birth=r['生年']||h.birth; h.sex=r['性別']||h.sex;
+    h.sire=r['父']||h.sire; h.dam=r['母']||h.dam;
+    h.retireYear=r['現役引退年']; h.status='引退'; }
+  for(const r of d.broodmare){ const h=get(r['馬名']); if(!h) continue;
+    h.id=r['ID']; h.birth=r['生年']||h.birth; h.sex='牝';
+    h.sire=r['父']||h.sire; h.dam=r['母']||h.dam;
+    h.retireYear=h.retireYear||r['現役引退年']; h.status='繁殖'; }
+  for(const r of d.stallion){ const h=get(r['馬名']); if(!h) continue;
+    h.id=r['ID']; h.birth=r['生年']||h.birth; h.sex='牡';
+    h.sire=r['父']||h.sire; h.dam=r['母']||h.dam;
+    h.retireYear=h.retireYear||r['現役引退年']; h.status='種牡馬'; }
+  for(const h of horses.values()) h.region = REGION_OF[h.base] || null;
+
+  // 産駒
+  for(const h of horses.values()){
+    for(const p of [h.sire,h.dam]){ const pp=p&&horses.get(nm(p)); if(pp) pp.children.push(h.name); }
+  }
+  for(const h of horses.values())
+    h.children.sort((a,b)=>(horses.get(a).birth||'').localeCompare(horses.get(b).birth||''));
+
+  // 戦績
+  const runs=[];
+  for(const r of d.results){
+    const name=nm((r['馬名']||'').trim()); if(!name) continue;
+    runs.push({ name, date:r['年月日'], year:+String(r['年月日']).slice(0,4),
+      place:r['場所'], race:r['レース名'], grade:r['G'], surface:r['馬場'], cond:r['状態'],
+      dist:+r['距離']||0, pop:r['人気'], rank:+r['着順']||0, time:r['タイム'],
+      jockey:r['騎手'], prize:+(r['賞金']||0) });
+  }
+  runs.sort((a,b)=>a.date.localeCompare(b.date));
+  const byHorse=new Map();
+  for(const r of runs){ if(!byHorse.has(r.name)) byHorse.set(r.name,[]); byHorse.get(r.name).push(r); }
+  for(const [n,rs] of byHorse){ const h=get(n); h.runs=rs; h.total=agg(rs); }
+
+  // レース単位に集約 → 勝ち馬を確定し、着順別賞金率から1着賞金を逆算する
+  const races=new Map();
+  for(const r of runs){
+    const k=r.date+'|'+r.place+'|'+r.race;
+    if(!races.has(k)) races.set(k,{date:r.date,year:r.year,place:r.place,race:r.race,
+      grade:r.grade,surface:r.surface,dist:r.dist,mine:[]});
+    races.get(k).mine.push(r);
+  }
+  const rivals=new Map();   // 「馬名|年」→ その年に判明している他厩舎馬の戦績
+  for(const R of races.values()){
+    const w=R.mine.find(x=>x.rank===1);
+    if(w){ R.winner=w.name; R.owned=true; R.winPrize=w.prize; }
+    else{
+      const m=/[(（]([^)）]+)[)）]\s*$/.exec(R.mine[0].time||'');
+      R.winner=m?m[1].trim():null; R.owned=false;
+      if(R.winner){
+        const isJ=/^JPN/.test(G(R.grade));
+        for(const x of R.mine)
+          if(x.rank>=2&&x.rank<=5&&x.prize){ R.winPrize=Math.round(x.prize/RATE[isJ?'j':'n'][x.rank]); break; }
+      }
+    }
+    for(const x of R.mine) x.winner=R.winner;
+    if(R.owned||!R.winner) continue;
+    const k=R.winner+'|'+R.year;
+    if(!rivals.has(k)) rivals.set(k,{name:R.winner,year:R.year,wins:[],regions:{}});
+    const v=rivals.get(k);
+    v.wins.push(R);
+    const rg=venueRegion(R.place); v.regions[rg]=(v.regions[rg]||0)+1;
+  }
+  for(const v of rivals.values())
+    v.region=Object.entries(v.regions).sort((a,b)=>b[1]-a[1])[0][0];
+
+  const years=[...new Set(runs.map(r=>r.year))].filter(Boolean).sort();
+  const awards=computeAwards(horses,runs,years,rivals);
+  return { horses, runs, byHorse, years, awards, rivals, races };
+}
+
+const G = g => (g||'').replace(/[.．]/g,'');
+const isG1 = g => G(g)==='G1';
+const isJpn1 = g => G(g)==='JPNⅠ';
+const isGraded = g => /^(G[123]|JPN[ⅠⅡⅢ])$/.test(G(g));
+
+function agg(rs){
+  const a={n:rs.length,w:0,p2:0,p3:0,prize:0,g1:0,jpn1:0,gr:0,wins:[]};
+  for(const r of rs){
+    a.prize+=r.prize;
+    if(r.rank===2) a.p2++;
+    if(r.rank===3) a.p3++;
+    if(r.rank!==1) continue;
+    a.w++;
+    if(isGraded(r.grade)) a.gr++;
+    if(isG1(r.grade)){ a.g1++; a.wins.push(r); }
+    else if(isJpn1(r.grade)){ a.jpn1++; a.wins.push(r); }
+  }
+  return a;
+}
+// 他厩舎馬: 判明している勝ち鞍だけから戦績を組む（賞金は着順別レートからの逆算値）
+function aggWins(list){
+  const a={n:list.length,w:list.length,p2:0,p3:0,prize:0,g1:0,jpn1:0,gr:0,wins:[],partial:true};
+  for(const R of list){
+    a.prize+=R.winPrize||0;
+    if(isGraded(R.grade)) a.gr++;
+    if(isG1(R.grade)){ a.g1++; a.wins.push(R); }
+    else if(isJpn1(R.grade)){ a.jpn1++; a.wins.push(R); }
+  }
+  return a;
+}
+const pts = a => a.prize + a.g1*PT_G1 + a.jpn1*PT_JPN1;
+const score = a => [pts(a), a.g1, a.gr, a.w];
+const better = (x,y) => { for(let i=0;i<x.length;i++) if(x[i]!==y[i]) return x[i]>y[i]; return false; };
+const qualifies = (region,a) => {
+  if(a.w===0) return false;
+  if(region==='日本') return true;
+  if(a.g1>=OVERSEAS_MIN_G1) return true;
+  return a.g1>=1 && a.prize>=OVERSEAS_MIN_PRIZE;
+};
+
+const AGE_CATS=[
+  ['最優秀2歳牡馬',   (h,y)=>y-+h.birth===2 && h.sex==='牡'],
+  ['最優秀2歳牝馬',   (h,y)=>y-+h.birth===2 && h.sex==='牝'],
+  ['最優秀3歳牡馬',   (h,y)=>y-+h.birth===3 && h.sex==='牡'],
+  ['最優秀3歳牝馬',   (h,y)=>y-+h.birth===3 && h.sex==='牝'],
+  ['最優秀4歳上牡馬', (h,y)=>y-+h.birth>=4 && h.sex==='牡'],
+  ['最優秀4歳上牝馬', (h,y)=>y-+h.birth>=4 && h.sex==='牝'],
+];
+const hasG1 = a => a.g1 + a.jpn1 >= 1;   // 2歳部門・短距離部門の受賞条件
+
+function computeAwards(horses,runs,years,rivals){
+  const byYear=new Map(), byHorseAward=new Map();
+  const note=(e,y,region,cat)=>{
+    if(e.rival) return;                    // 他厩舎馬はカルテを持たないので受賞歴を記録しない
+    if(!byHorseAward.has(e.n)) byHorseAward.set(e.n,[]);
+    byHorseAward.get(e.n).push({year:y,region,cat});
+  };
+  for(const y of years){
+    const rs=runs.filter(r=>r.year===y);
+    const names=[...new Set(rs.map(r=>r.name))];
+    const yearRivals=[...rivals.values()].filter(v=>v.year===y);
+    const regs={};
+    for(const region of REGIONS){
+      const rn=names.filter(n=>horses.get(n)&&horses.get(n).region===region);
+      const rv=yearRivals.filter(v=>v.region===region);
+      const list=[];
+      const pick=cands=>{ let b=null;
+        for(const c of cands) if(qualifies(region,c.a)&&(!b||better(score(c.a),score(b.a)))) b=c;
+        return b; };
+      const mine=f=>rn.map(n=>({n,h:horses.get(n),a:agg(rs.filter(r=>r.name===n&&(!f||f(r))))}))
+                     .filter(e=>e.a.n>0);
+      // 他厩舎馬は判明分の勝ち鞍しか分からないため、G1(またはJpnⅠ)を勝った場合のみ候補に入れる
+      const others=f=>rv.map(v=>({n:v.name,h:{name:v.name},rival:true,
+                                  a:aggWins(f?v.wins.filter(f):v.wins)}))
+                       .filter(e=>e.a.n>0 && hasG1(e.a));
+
+      // 年度代表馬 — 自厩舎と他厩舎の両方が候補。G1(またはJpnⅠ)勝ちが必須
+      const champ=pick([...mine(), ...others()].filter(e=>hasG1(e.a)));
+      list.push({cat:'年度代表馬',win:champ});
+      if(champ) note(champ,y,region,'年度代表馬');
+
+      // 世代別 — 生年・性別が要るので自厩舎のみ。2歳部門はG1勝ちが必須
+      const ent=mine();
+      for(const [label,f] of AGE_CATS){
+        let c=ent.filter(e=>e.h.birth&&f(e.h,y));
+        if(label.includes('2歳')) c=c.filter(e=>hasG1(e.a));
+        const b=pick(c);
+        list.push({cat:label,win:b});
+        if(b) note(b,y,region,label);
+      }
+
+      // 短距離 — 1400m以下のG1勝ちが必須（日本ならスプリンターズS・高松宮記念）
+      const spf=r=>r.dist&&r.dist<=SPRINT_MAX;
+      const sp=pick([...mine(spf), ...others(spf)].filter(e=>hasG1(e.a)));
+      list.push({cat:'最優秀短距離馬',win:sp});
+      if(sp) note(sp,y,region,'最優秀短距離馬');
+
+      // ダート
+      if(HAS_DIRT[region]){
+        const df=r=>r.surface==='ダート';
+        const dt=pick([...mine(df), ...others(df)]);
+        list.push({cat:'最優秀ダートホース',win:dt});
+        if(dt) note(dt,y,region,'最優秀ダートホース');
+      }
+      regs[region]={count:rn.length,list,
+        rivals:rv.filter(v=>aggWins(v.wins).g1+aggWins(v.wins).jpn1>0)
+                 .map(v=>({name:v.name,a:aggWins(v.wins)}))
+                 .sort((a,b)=>pts(b.a)-pts(a.a))};
+    }
+    byYear.set(y,{starters:names.length,runs:rs.length,regs});
+  }
+  return {byYear,byHorse:byHorseAward};
+}
+
+/* ============ 描画ユーティリティ ============ */
+const esc = s => String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const hlink = n => DB.horses.has(nm(n))
+  ? '<a class="link" href="#/horse/'+encodeURIComponent(nm(n))+'">'+esc(n)+'</a>' : esc(n);
+const num = n => (n||0).toLocaleString('ja-JP');
+const recStr = a => a.n+'戦'+a.w+'勝'+(a.g1?'／G1 '+a.g1+'勝':'')+(a.jpn1?'／JpnⅠ '+a.jpn1+'勝':'');
+const gradeTag = g => { const t=G(g); if(!t) return '';
+  const cls = (t==='G1'||t==='JPNⅠ') ? 'gr g1' : 'gr';
+  return /^(G[123]|JPN[ⅠⅡⅢ]|L|OP)$/.test(t) ? '<span class="'+cls+'">'+esc(g)+'</span>' : esc(g); };
+
+/* ============ 画面: 年度表彰 ============ */
+function viewAwards(){
+  const A=DB.awards, ys=[...DB.years].reverse();
+  let h='<h1>年度表彰</h1><div class="sub">'+DB.years[0]+'〜'+DB.years[DB.years.length-1]
+    +'年／'+DB.byHorse.size+'頭・'+num(DB.runs.length)+'走の記録から自動選定。'
+    +'複合スコア＝獲得賞金＋G1勝×'+num(PT_G1)+'＋JpnⅠ勝×'+num(PT_JPN1)+'。'
+    +'2歳部門はG1勝ちが必須、短距離部門は'+SPRINT_MAX+'m以下のG1勝ち馬から選定。'
+    +'海外部門はG1 '+OVERSEAS_MIN_G1+'勝以上、またはG1 1勝かつ年間賞金'+num(OVERSEAS_MIN_PRIZE)+'以上が条件。'
+    +'年度代表馬・短距離・ダートは他厩舎馬も候補（タイム欄の勝ち馬名と着順別賞金率からの推定）。</div>';
+  for(const y of ys){
+    const d=A.byYear.get(y);
+    const tops=REGIONS.map(r=>{ const c=d.regs[r].list.find(x=>x.cat==='年度代表馬'); return c&&c.win?c.win.n:null; })
+                      .filter(Boolean);
+    h+='<details class="yr"'+(y===ys[0]?' open':'')+'><summary><span>'+y+'年</span>'
+      +'<span class="top">'+esc(tops.join('／')||'—')+'</span>'
+      +'<span class="meta">'+d.starters+'頭出走・'+d.runs+'走</span></summary><div class="regions">';
+    for(const region of REGIONS){
+      const r=d.regs[region];
+      h+='<div class="reg '+region+'"><h3>'+region+' <span>'+r.count+'頭</span></h3>';
+      if(!r.count&&!r.rivals.length){ h+='<div class="none">この年の出走なし</div></div>'; continue; }
+      for(const it of r.list){
+        const hero = it.cat==='年度代表馬' ? ' hero' : '';
+        h+='<dl class="aw'+hero+'"><dt>'+it.cat.replace('最優秀','')+'</dt><dd>';
+        if(it.win){
+          const a=it.win.a, rv=it.win.rival;
+          h+='<div class="who">'+hlink(it.win.n)+(rv?'<span class="ext">他厩舎</span>':'')+'</div>'
+            +'<div class="rec">'+(rv?a.w+'勝（判明分）':a.n+'戦'+a.w+'勝')
+            +'　G1 '+a.g1+(a.jpn1?'・JpnⅠ '+a.jpn1:'')
+            +'　'+(rv?'推定賞金':'賞金')+num(a.prize)+'</div>';
+          if(a.wins.length) h+='<div class="g1">'+a.wins.map(w=>esc(w.race)).join('、')+'</div>';
+        } else h+='<span class="none">該当なし</span>';
+        h+='</dd></dl>';
+      }
+      if(r.rivals.length){
+        h+='<details class="rivals"><summary>他厩舎のG1勝ち馬 '+r.rivals.length+'頭</summary>';
+        for(const v of r.rivals)
+          h+='<div class="rrow"><b>'+esc(v.name)+'</b>'
+            +'<span>G1 '+v.a.g1+(v.a.jpn1?'・JpnⅠ '+v.a.jpn1:'')+'／推定'+num(v.a.prize)+'</span>'
+            +'<em>'+v.a.wins.map(w=>esc(w.race)).join('、')+'</em></div>';
+        h+='</details>';
+      }
+      h+='</div>';
+    }
+    h+='</div></details>';
+  }
+  return h;
+}
+
+/* ============ 画面: 馬別カルテ ============ */
+function ancestors(name,depth){
+  const h=DB.horses.get(nm(name||''));
+  if(depth===0||!h) return {name:name||'',known:!!h};
+  return {name:name||'',known:!!h,s:h.sire?ancestors(h.sire,depth-1):null,
+                                   d:h.dam?ancestors(h.dam,depth-1):null};
+}
+function viewHorse(name){
+  const h=DB.horses.get(name);
+  if(!h) return '<h1>該当なし</h1><div class="sub">「'+esc(name)+'」は登録されていません。</div>';
+  const runs=h.runs||[], t=h.total||agg([]);
+  const aw=DB.awards.byHorse.get(name)||[];
+  const age=h.birth&&runs.length?null:null;
+
+  let s='<div class="card"><div class="hero-h"><div class="name">'+esc(h.name)+'</div><div class="tags">'
+    +(h.status?'<span class="tag">'+esc(h.status)+'</span>':'')
+    +(h.region?'<span class="tag">'+esc(h.region)+'</span>':'')
+    +aw.filter(a=>a.cat==='年度代表馬').map(a=>'<span class="tag b">'+a.year+' 年度代表馬</span>').join('')
+    +'</div></div>';
+  s+='<div class="facts">'
+    +f('生年',h.birth?h.birth+'年':'—')+f('性別',h.sex)+f('毛色',h.color)
+    +f('父',h.sire?hlink(h.sire):'—')+f('母',h.dam?hlink(h.dam):'—')
+    +f('調教師',h.trainer)+f('所属',h.base)
+    +(h.retireYear&&h.retireYear!=='-'?f('現役引退',h.retireYear+'年'):'')
+    +'</div></div>';
+
+  if(runs.length){
+    s+='<div class="card"><h2>通算成績</h2><div class="stats">'
+      +st(t.n,'出走')+st(t.w,'勝')+st(t.p2,'2着')+st(t.p3,'3着')
+      +st(t.g1+t.jpn1,'G1勝')+st(t.gr,'重賞勝')
+      +st(num(t.prize),'獲得賞金')+st((t.n?Math.round(t.w/t.n*100):0)+'%','勝率')
+      +'</div></div>';
+  }
+  if(aw.length){
+    s+='<div class="card"><h2>受賞歴</h2><div class="rel">'
+      +aw.map(a=>'<a href="#/awards">'+a.year+' '+esc(a.region)+' '+esc(a.cat)+'</a>').join('')
+      +'</div></div>';
+  }
+
+  // 3代血統表（列ごとに 2頭 / 4頭 / 8頭）
+  const p=ancestors(h.name,3);
+  if(p.s||p.d){
+    const g=(x,k)=>x&&x[k]?x[k]:null;
+    const cell=(x,c)=>'<div class="'+c+(x&&x.known?'':' q')+'">'+(x&&x.name?hlink(x.name):'—')+'</div>';
+    const c1=[[p.s,'s'],[p.d,'d']];
+    const c2=[], c3=[];
+    for(const [a] of c1){ c2.push([g(a,'s'),'s'],[g(a,'d'),'d']); }
+    for(const [b] of c2){ c3.push([g(b,'s'),'s'],[g(b,'d'),'d']); }
+    s+='<div class="card"><h2>血統表</h2><div class="ped">'
+      +'<div class="pcol">'+c1.map(([x,c])=>cell(x,c)).join('')+'</div>'
+      +'<div class="pcol">'+c2.map(([x,c])=>cell(x,c)).join('')+'</div>'
+      +'<div class="pcol c3">'+c3.map(([x,c])=>cell(x,c)).join('')+'</div>'
+      +'</div></div>';
+  }
+
+  // 近親
+  const sibs=[...DB.horses.values()].filter(x=>x.name!==h.name&&h.dam&&x.dam&&nm(x.dam)===nm(h.dam));
+  if(sibs.length||h.children.length){
+    s+='<div class="card"><h2>近親・産駒</h2>';
+    if(sibs.length) s+='<div style="margin-bottom:10px"><div style="font-size:11px;color:var(--muted)">母'
+      +esc(h.dam)+'の仔</div><div class="rel">'
+      +sibs.sort((a,b)=>(a.birth||'').localeCompare(b.birth||''))
+           .map(x=>'<a href="#/horse/'+encodeURIComponent(x.name)+'">'+esc(x.name)
+             +(x.birth?' <span style="color:var(--muted)">'+x.birth+'</span>':'')+'</a>').join('')+'</div></div>';
+    if(h.children.length) s+='<div><div style="font-size:11px;color:var(--muted)">産駒 '
+      +h.children.length+'頭</div><div class="rel">'
+      +h.children.map(n=>'<a href="#/horse/'+encodeURIComponent(n)+'">'+esc(n)
+        +(DB.horses.get(n).birth?' <span style="color:var(--muted)">'+DB.horses.get(n).birth+'</span>':'')
+        +'</a>').join('')+'</div></div>';
+    s+='</div>';
+  }
+
+  if(runs.length){
+    s+='<div class="card"><h2>全戦績 '+runs.length+'走</h2><div class="scroll"><table><thead><tr>'
+      +'<th>日付</th><th>場所</th><th>レース名</th><th>格</th><th>馬場</th><th class="num">距離</th>'
+      +'<th class="num">人気</th><th class="num">着順</th><th>タイム</th><th>勝ち馬</th>'
+      +'<th>騎手</th><th class="num">賞金</th>'
+      +'</tr></thead><tbody>';
+    let cy=null;
+    for(const r of runs){
+      if(r.year!==cy){ cy=r.year; s+='<tr class="ysep"><td colspan="12">'+cy+'年'
+        +(h.birth?'（'+(cy-+h.birth)+'歳）':'')+'</td></tr>'; }
+      const t=(r.time||'').replace(/[(（][^)）]*[)）]\s*$/,'');
+      s+='<tr><td>'+esc(r.date)+'</td><td>'+esc(r.place.replace('競馬場',''))+'</td>'
+        +'<td>'+esc(r.race)+'</td><td>'+gradeTag(r.grade)+'</td>'
+        +'<td>'+esc(r.surface)+esc(r.cond&&r.cond!=='良'?'/'+r.cond:'')+'</td>'
+        +'<td class="num">'+(r.dist||'')+'</td><td class="num">'+esc(r.pop)+'</td>'
+        +'<td class="num'+(r.rank===1?' win':'')+'">'+(r.rank||'')+'</td>'
+        +'<td>'+esc(t)+'</td>'
+        +'<td>'+(r.rank===1?'<span class="none">—</span>':(r.winner?hlink(r.winner):''))+'</td>'
+        +'<td>'+esc(r.jockey)+'</td>'
+        +'<td class="num">'+(r.prize?num(r.prize):'')+'</td></tr>';
+    }
+    s+='</tbody></table></div></div>';
+  } else s+='<div class="card"><div class="none">出走記録はありません。</div></div>';
+  return s;
+
+  function f(k,v){ return '<div><span>'+k+'</span>'+(v||'—')+'</div>'; }
+  function st(v,k){ return '<div><b>'+v+'</b><span>'+k+'</span></div>'; }
+}
+
+/* ============ 画面: 馬一覧 ============ */
+let LF={q:'',status:'',region:'',sort:'birth'};
+function viewHorses(){
+  const all=[...DB.horses.values()];
+  const gens=[...new Set(all.map(h=>h.birth).filter(Boolean))].sort();
+  let h='<h1>馬一覧</h1><div class="sub">'+all.length+'頭を登録。うち'+DB.byHorse.size+'頭に出走記録があります。</div>'
+   +'<div class="filters">'
+   +'<input id="lq" placeholder="馬名・父・母で絞り込み" value="'+esc(LF.q)+'">'
+   +sel('lstatus',LF.status,'すべての状態',['現役','引退','繁殖','種牡馬'])
+   +sel('lregion',LF.region,'すべての地域',REGIONS)
+   +sel('lsort',LF.sort,null,[['birth','生年順'],['prize','獲得賞金順'],['g1','G1勝ち数順'],['name','馬名順']])
+   +'</div><div class="grid" id="hgrid">'+cards()+'</div>';
+  return h;
+
+  function sel(id,val,ph,opts){
+    return '<select id="'+id+'">'+(ph?'<option value="">'+ph+'</option>':'')
+      +opts.map(o=>{ const [v,l]=Array.isArray(o)?o:[o,o];
+        return '<option value="'+esc(v)+'"'+(val===v?' selected':'')+'>'+esc(l)+'</option>'; }).join('')
+      +'</select>';
+  }
+  function cards(){
+    let list=all.filter(x=>
+      (!LF.status||x.status===LF.status) &&
+      (!LF.region||x.region===LF.region) &&
+      (!LF.q||[x.name,x.sire,x.dam].some(v=>v&&v.includes(LF.q))));
+    const key={ birth:x=>[-(+x.birth||0),x.name], name:x=>[x.name],
+                prize:x=>[-(x.total?x.total.prize:0)], g1:x=>[-((x.total?x.total.g1+x.total.jpn1:0))] }[LF.sort];
+    list.sort((a,b)=>{ const A=key(a),B=key(b);
+      for(let i=0;i<A.length;i++){ if(A[i]<B[i]) return -1; if(A[i]>B[i]) return 1; } return 0; });
+    if(!list.length) return '<div class="none">該当する馬がいません。</div>';
+    return list.map(x=>'<a class="hcard" href="#/horse/'+encodeURIComponent(x.name)+'">'
+      +'<div class="n">'+esc(x.name)+'</div>'
+      +'<div class="m">'+[x.birth&&x.birth+'年',x.sex,x.status,x.base].filter(Boolean).map(esc).join(' ・ ')+'</div>'
+      +'<div class="m">'+esc(x.sire||'?')+' × '+esc(x.dam||'?')+'</div>'
+      +(x.total?'<div class="r">'+recStr(x.total)+'　'+num(x.total.prize)+'</div>':'')
+      +'</a>').join('');
+  }
+}
+function bindHorses(){
+  const g=document.getElementById('hgrid'); if(!g) return;
+  const re=()=>{ document.getElementById('app').innerHTML=viewHorses(); bindHorses();
+                 const i=document.getElementById('lq'); if(i){ i.focus(); i.setSelectionRange(i.value.length,i.value.length);} };
+  const q=document.getElementById('lq');
+  q.oninput=e=>{ LF.q=e.target.value; document.getElementById('hgrid').innerHTML=viewHorses()
+    .split('<div class="grid" id="hgrid">')[1].replace(/<\/div>$/,''); };
+  document.getElementById('lstatus').onchange=e=>{ LF.status=e.target.value; re(); };
+  document.getElementById('lregion').onchange=e=>{ LF.region=e.target.value; re(); };
+  document.getElementById('lsort').onchange=e=>{ LF.sort=e.target.value; re(); };
+}
+
+/* ============ ルーター ============ */
+function render(){
+  if(!DB) return;
+  const hash=location.hash||'#/awards';
+  const app=document.getElementById('app');
+  let route='awards';
+  if(hash.startsWith('#/horse/')){ app.innerHTML=viewHorse(decodeURIComponent(hash.slice(8))); route='horses'; }
+  else if(hash.startsWith('#/horses')){ app.innerHTML=viewHorses(); bindHorses(); route='horses'; }
+  else { app.innerHTML=viewAwards(); }
+  document.querySelectorAll('nav a').forEach(a=>a.classList.toggle('on',a.dataset.r===route));
+  window.scrollTo(0,0);
+}
+window.addEventListener('hashchange',render);
+
+/* ============ 検索 ============ */
+const qi=document.getElementById('q'), sg=document.getElementById('sug');
+qi.addEventListener('input',()=>{
+  const v=qi.value.trim(); if(!v||!DB){ sg.hidden=true; return; }
+  const hit=[...DB.horses.values()].filter(h=>h.name.includes(v)).slice(0,12);
+  sg.hidden=!hit.length;
+  sg.innerHTML=hit.map(h=>'<a href="#/horse/'+encodeURIComponent(h.name)+'">'+esc(h.name)
+    +'<small>'+[h.birth,h.status].filter(Boolean).join(' ')+'</small></a>').join('');
+});
+sg.addEventListener('click',()=>{ sg.hidden=true; qi.value=''; });
+document.addEventListener('click',e=>{ if(!e.target.closest('.search')) sg.hidden=true; });
+
+/* ============ 起動 ============ */
+const stat=document.getElementById('status');
+(function boot(){
+  const cached=localStorage.getItem(CACHE_KEY);
+  if(cached){
+    try{ DB=build(JSON.parse(cached)); render(); stat.textContent='更新を確認中…'; }catch(e){ localStorage.removeItem(CACHE_KEY); }
+  }
+  fetchAll().then(raw=>{
+    const s=JSON.stringify(raw);
+    if(s!==cached){
+      try{ localStorage.setItem(CACHE_KEY,s); }catch(e){}
+      DB=build(raw); render();
+    }
+    stat.textContent='最新（'+new Date().toLocaleTimeString('ja-JP',{hour:'2-digit',minute:'2-digit'})+'時点）';
+  }).catch(err=>{
+    stat.textContent='取得失敗';
+    if(!DB) document.getElementById('app').innerHTML=
+      '<div class="loading">スプレッドシートを読み込めませんでした。<br><small>'+esc(err.message)+'</small></div>';
+  });
+})();
+</script>
+</body>
+</html>
