@@ -217,8 +217,12 @@ const SHEETS = [
   { key:'stallion',  gid:495363124, tq:'select * where B is not null' },
   { key:'results',   gid:1732161958 },
   { key:'form',      gid:1758942740 },
+  { key:'jockeyM',   gid:708548464 },    // 騎手マスタ
+  { key:'jockeyMO',  gid:776150858 },    // 海外騎手マスタ
+  { key:'trainerM',  gid:1019895905 },   // 調教師マスタ
+  { key:'trainerMO', gid:2023682065 },   // 海外調教師マスタ
 ];
-const CACHE_KEY = 'wp-cache-v1';
+const CACHE_KEY = 'wp-cache-v2';
 const PT_G1 = 20000, PT_JPN1 = 10000;      // 複合スコアの加点
 const OVERSEAS_MIN_G1 = 2, OVERSEAS_MIN_PRIZE = 10000;
 const SPRINT_MAX = 1400;                   // 短距離部門の上限（日本ならスプリンターズS・高松宮記念）
@@ -254,6 +258,9 @@ function sheetURL(s){
   const u=new URL('https://docs.google.com/spreadsheets/d/'+SHEET_ID+'/gviz/tq');
   u.searchParams.set('tqx','out:csv');
   u.searchParams.set('gid',String(s.gid));
+  // headers=1 は必須。省略するとgvizがヘッダー行数を推測し、
+  // 文字列だけの列が続くシートで先頭の数百行をヘッダーとして1行に連結してしまう
+  u.searchParams.set('headers','1');
   if(s.tq) u.searchParams.set('tq',s.tq);
   return u;
 }
@@ -267,6 +274,42 @@ async function fetchAll(){
 /* ============ モデル構築 ============ */
 const nm = n => ALIAS[n] || n;
 let DB = null;
+
+/* --- 騎手名・調教師名マスタ ---
+   マスタは「名前(ゲーム内表記)」→「変更後(実在の人名)」の対応表。
+   変更後が空ならゲーム内表記のまま表示する（オリジナルの架空キャラ）。
+   海外シートはフルネーム登録なので、レース結果側の姓だけの表記とは姓で照合する。 */
+const SUR = s => s.trim().split(/\s+/).pop();
+const PERSON_ALIAS = { 'ディハサン':'ディサハン' };        // 実データ側の表記ゆれ
+const SURNAME_PICK = { 'トスカロ':'セサール トスカロ' };   // 姓が重複するときの指定
+
+function buildPersonMap(dom, ovs){
+  const exact=new Map(), sur=new Map();
+  for(const r of dom||[]){
+    const n=(r['名前']||'').trim(); if(!n) continue;
+    exact.set(n,{ to:(r['変更後']||'').split('\n')[0].trim(), en:'', full:n,
+                  kana:(r['フリガナ']||'').trim(), span:(r['現役期間']||'').trim() });
+  }
+  for(const r of ovs||[]){
+    const n=(r['名前']||'').trim(); if(!n) continue;
+    const v=(r['変更後']||'').split('\n');
+    const rec={ to:(v[0]||'').trim(), en:(v[1]||'').trim(), full:n, base:(r['所属']||'').trim() };
+    exact.set(n,rec);
+    const s=SUR(n);
+    sur.set(s, sur.has(s) ? 'DUP' : rec);   // 姓が重複したら曖昧なので使わない
+  }
+  return { exact, sur };
+}
+function resolvePerson(name, M){
+  const n = PERSON_ALIAS[name] || name;
+  let rec = M.exact.get(n);
+  if(!rec){
+    const pick = SURNAME_PICK[n];
+    rec = pick ? M.exact.get(pick) : M.sur.get(n);
+    if(rec==='DUP') rec = null;
+  }
+  return { game:n, disp:(rec&&rec.to)?rec.to:n, rec:rec||null };
+}
 
 function build(raw){
   const d={}; for(const s of SHEETS) d[s.key]=parseCSV(raw[s.key]);
@@ -297,6 +340,20 @@ function build(raw){
     h.retireYear=h.retireYear||r['現役引退年']; h.status='種牡馬'; }
   for(const h of horses.values()) h.region = REGION_OF[h.base] || null;
 
+  // 騎手名・調教師名を実在の人名に置き換える
+  const JMAP=buildPersonMap(d.jockeyM, d.jockeyMO);
+  const TMAP=buildPersonMap(d.trainerM, d.trainerMO);
+  const jockeyMeta=new Map(), trainerMeta=new Map();
+  const noteMeta=(map,p)=>{
+    if(!map.has(p.disp)) map.set(p.disp,{games:new Set(),rec:null});
+    const m=map.get(p.disp); m.games.add(p.game); if(p.rec&&!m.rec) m.rec=p.rec;
+  };
+  for(const h of horses.values()){
+    if(!h.trainer) continue;
+    const p=resolvePerson(h.trainer,TMAP);
+    h.trainerGame=p.game; h.trainer=p.disp; noteMeta(trainerMeta,p);
+  }
+
   // 産駒
   for(const h of horses.values()){
     for(const p of [h.sire,h.dam]){ const pp=p&&horses.get(nm(p)); if(pp) pp.children.push(h.name); }
@@ -308,10 +365,13 @@ function build(raw){
   const runs=[];
   for(const r of d.results){
     const name=nm((r['馬名']||'').trim()); if(!name) continue;
+    const jraw=(r['騎手']||'').trim();
+    const jp=jraw?resolvePerson(jraw,JMAP):null;
+    if(jp) noteMeta(jockeyMeta,jp);
     runs.push({ name, date:r['年月日'], year:+String(r['年月日']).slice(0,4),
       place:r['場所'], race:r['レース名'], grade:r['G'], surface:r['馬場'], cond:r['状態'],
       dist:+r['距離']||0, pop:r['人気'], rank:+r['着順']||0, time:r['タイム'],
-      jockey:r['騎手'], prize:+(r['賞金']||0) });
+      jockey:jp?jp.disp:'', jockeyGame:jp?jp.game:'', prize:+(r['賞金']||0) });
   }
   runs.sort((a,b)=>a.date.localeCompare(b.date));
   const byHorse=new Map();
@@ -361,7 +421,8 @@ function build(raw){
 
   const years=[...new Set(runs.map(r=>r.year))].filter(Boolean).sort();
   const awards=computeAwards(horses,runs,years,rivals);
-  return { horses, runs, byHorse, years, awards, rivals, races, jockeys, trainers };
+  return { horses, runs, byHorse, years, awards, rivals, races, jockeys, trainers,
+           jockeyMeta, trainerMeta };
 }
 
 const G = g => (g||'').replace(/[.．]/g,'');
@@ -811,6 +872,22 @@ function bindBreeding(kind){
 const jlink = n => '<a class="link" href="#/jockey/'+encodeURIComponent(n)+'">'+esc(n)+'</a>';
 const tlink = n => '<a class="link" href="#/trainer/'+encodeURIComponent(n)+'">'+esc(n)+'</a>';
 const rate = a => a.n ? Math.round(a.w/a.n*100)+'%' : '';
+// ゲーム内表記や英語名などの補足行
+function personSub(meta, disp){
+  if(!meta) return '';
+  const bits=[];
+  const games=[...meta.games].filter(g=>g&&g!==disp);
+  if(games.length) bits.push('ゲーム内表記: '+games.join('、'));
+  const r=meta.rec;
+  if(r){
+    if(r.en) bits.push(r.en);
+    if(r.kana) bits.push(r.kana);
+    if(r.span) bits.push('現役 '+r.span);
+    if(r.base) bits.push(r.base);
+  }
+  return bits.length ? '<div class="sub" style="margin:4px 0 0">'+esc(bits.join(' ／ '))+'</div>' : '';
+}
+const matchPerson = (meta,q) => !q || [...(meta?meta.games:[])].some(g=>g.includes(q));
 const tile = (v,k) => '<div><b>'+v+'</b><span>'+k+'</span></div>';
 // 年度別成績の表
 function yearTable(runsList){
@@ -852,7 +929,7 @@ function viewJockeys(){
     +'</select></div><div class="card"><div class="scroll">'+table()+'</div></div>';
   return h;
   function table(){
-    let list=all.filter(x=>!f.q||x.n.includes(f.q));
+    let list=all.filter(x=>!f.q||x.n.includes(f.q)||matchPerson(DB.jockeyMeta.get(x.n),f.q));
     const key={ w:x=>[-x.a.w,-x.a.prize], prize:x=>[-x.a.prize], n:x=>[-x.a.n],
                 g1:x=>[-(x.a.g1+x.a.jpn1),-x.a.prize], name:x=>[x.n] }[f.sort];
     list.sort((a,b)=>{ const A=key(a),B=key(b);
@@ -882,6 +959,7 @@ function viewJockey(name){
     .sort((x,y)=>y.a.w-x.a.w||y.a.prize-x.a.prize);
   let s='<div class="card"><div class="hero-h"><div class="name">'+esc(name)+'</div>'
     +'<div class="tags"><span class="tag">騎手</span></div></div>'
+    +personSub(DB.jockeyMeta.get(name),name)
     +'<div class="stats" style="margin-top:16px">'
     +tile(a.n,'騎乗')+tile(a.w,'1着')+tile(a.p2,'2着')+tile(a.p3,'3着')
     +tile(rate(a),'勝率')+tile(a.gr,'重賞勝')+tile(a.g1+a.jpn1,'G1勝')+tile(num(a.prize),'獲得賞金')
@@ -916,7 +994,7 @@ function viewTrainers(){
     +'転厩があった場合も現在の調教師の成績としてまとめて集計されます。</div>';
   return h;
   function table(){
-    let list=all.filter(x=>!f.q||x.n.includes(f.q));
+    let list=all.filter(x=>!f.q||x.n.includes(f.q)||matchPerson(DB.trainerMeta.get(x.n),f.q));
     const key={ prize:x=>[-x.a.prize], w:x=>[-x.a.w,-x.a.prize], horses:x=>[-x.hs.length],
                 g1:x=>[-(x.a.g1+x.a.jpn1),-x.a.prize], name:x=>[x.n] }[f.sort];
     list.sort((a,b)=>{ const A=key(a),B=key(b);
@@ -944,6 +1022,7 @@ function viewTrainer(name){
   let s='<div class="card"><div class="hero-h"><div class="name">'+esc(name)+'</div>'
     +'<div class="tags"><span class="tag">調教師</span>'
     +(hs[0].base?'<span class="tag">'+esc(hs[0].base)+'</span>':'')+'</div></div>'
+    +personSub(DB.trainerMeta.get(name),name)
     +'<div class="stats" style="margin-top:16px">'
     +tile(hs.length,'管理馬')+tile(a.n,'出走')+tile(a.w,'1着')+tile(a.p2,'2着')
     +tile(rate(a),'勝率')+tile(a.gr,'重賞勝')+tile(a.g1+a.jpn1,'G1勝')+tile(num(a.prize),'獲得賞金')
