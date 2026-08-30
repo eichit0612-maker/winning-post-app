@@ -56,10 +56,6 @@ nav a.on{background:var(--accent);color:var(--on-bright);font-weight:600}
 .sug a:hover{background:var(--accent-soft)}
 .sug small{color:var(--muted);margin-left:6px}
 .status{font-size:12px;color:var(--muted);white-space:nowrap}
-.save-sel{font-family:inherit;font-size:12.5px;padding:5px 9px;border-radius:999px;
-  border:1px solid var(--line);background:var(--panel2);color:var(--muted);cursor:pointer;max-width:200px}
-.save-sel:hover{color:var(--ink);border-color:var(--accent)}
-.save-sel:focus{outline:none;border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-soft)}
 .theme-btn{border:1px solid var(--line);background:var(--panel2);color:var(--ink);
   width:32px;height:32px;border-radius:50%;cursor:pointer;font-size:15px;line-height:1;padding:0}
 .theme-btn:hover{border-color:var(--accent);color:var(--accent)}
@@ -275,7 +271,6 @@ text.dlabel{fill:var(--ink);font-size:12.5px;font-weight:700}
 <script>try{document.documentElement.dataset.theme=localStorage.getItem('wp-theme')||'dark'}catch(e){document.documentElement.dataset.theme='dark'}</script>
 <header><div class="hd">
   <span class="brand">🏇 エアリス牧場 年史</span>
-  <select id="saveSel" class="save-sel" title="表示するセーブデータ"></select>
   <nav>
     <a href="#/summary" data-r="summary">年史</a>
     <a href="#/awards" data-r="awards">年度表彰</a>
@@ -299,13 +294,7 @@ text.dlabel{fill:var(--ink);font-size:12.5px;font-weight:700}
 <script>
 'use strict';
 /* ============ 設定 ============ */
-// 読み込むセーブデータ。列構成が同じスプレッドシートなら追加するだけで切り替えられる
-const SAVES = [
-  { id:'wp11', label:'WP11（1968〜）',      sheetId:'11lAW1NIhmA8n7Lxch20USaVKQOpNlmnLx7IutnsJ6sM', masters:true  },
-  { id:'wp10', label:'WP10 2025（2023〜）', sheetId:'1ah_-X27QCoChuhXLu1gKAKk6XsqfIFYCVorkqPLCEn4', masters:false },
-];
-let SAVE = SAVES.find(x=>x.id===(()=>{try{return localStorage.getItem('wp-save')}catch(e){return ''}})()) || SAVES[0];
-const MASTER_KEYS = ['jockeyM','jockeyMO','trainerM','trainerMO'];
+const SHEET_ID = '11lAW1NIhmA8n7Lxch20USaVKQOpNlmnLx7IutnsJ6sM';
 const SHEETS = [
   { key:'active',    gid:0 },
   { key:'retired',   gid:1637103436 },
@@ -319,9 +308,7 @@ const SHEETS = [
   { key:'trainerMO', gid:2023682065 },   // 海外調教師マスタ
   { key:'raceMaster', gid:769926424 },   // レースマスタ
 ];
-// 名前マスタを持たないセーブでは、そのシートを読みに行かない
-const activeSheets = () => SHEETS.filter(s => SAVE.masters || !MASTER_KEYS.includes(s.key));
-const cacheKey = () => 'wp-cache-v2:' + SAVE.id;
+const CACHE_KEY = 'wp-cache-v2';
 const PT_G1 = 20000, PT_JPN1 = 10000;      // 複合スコアの加点（1着）
 const PT_2ND = 10000, PT_3RD = 4000;       // G1での2着・3着の加点（JpnⅠは半分）
 const PT_UNDEFEATED = 20000;               // 無敗での三冠達成への上乗せ
@@ -379,7 +366,7 @@ function parseCSV(text){
              .filter(o=>Object.values(o).some(v=>v!==''));
 }
 function sheetURL(s){
-  const u=new URL('https://docs.google.com/spreadsheets/d/'+SAVE.sheetId+'/gviz/tq');
+  const u=new URL('https://docs.google.com/spreadsheets/d/'+SHEET_ID+'/gviz/tq');
   u.searchParams.set('tqx','out:csv');
   u.searchParams.set('gid',String(s.gid));
   // headers=1 は必須。省略するとgvizがヘッダー行数を推測し、
@@ -405,9 +392,8 @@ async function fetchOne(s, tries){
   throw new Error(s.key+': '+last.message);
 }
 async function fetchAll(){
-  const list = activeSheets();
-  const texts = await Promise.all(list.map(s=>fetchOne(s)));
-  const out={}; list.forEach((s,i)=>out[s.key]=texts[i]); return out;
+  const texts = await Promise.all(SHEETS.map(s=>fetchOne(s)));
+  const out={}; SHEETS.forEach((s,i)=>out[s.key]=texts[i]); return out;
 }
 const countLines = t => (t||'').split(String.fromCharCode(10)).length;
 // シートにフィルターが掛かっていると、その絞り込み結果だけが返る。
@@ -1868,17 +1854,15 @@ tb.onclick=()=>setTheme(document.documentElement.dataset.theme==='dark'?'light':
 
 /* ============ 起動 ============ */
 const stat=document.getElementById('status');
-function load(){
-  const cached=localStorage.getItem(cacheKey());
-  DB=null;
+(function boot(){
+  // セーブ切り替えを試した名残のキャッシュを掃除する
+  try{ ['wp-cache-v1','wp-cache-v2:wp11','wp-cache-v2:wp10','wp-save'].forEach(k=>localStorage.removeItem(k)); }catch(e){}
+  const cached=localStorage.getItem(CACHE_KEY);
   if(cached){
     try{ DB=build(JSON.parse(cached)); render(); stat.textContent='更新を確認中…'; }
-    catch(e){ localStorage.removeItem(cacheKey()); }
+    catch(e){ localStorage.removeItem(CACHE_KEY); }
   }
-  if(!DB) document.getElementById('app').innerHTML='<div class="loading"><div class="spin"></div>読み込み中…</div>';
-  const mySave=SAVE.id;
   fetchAll().then(raw=>{
-    if(mySave!==SAVE.id) return;               // 切り替え中に前のセーブの応答が届いた場合は捨てる
     const shrunk = looksTruncated(raw, cached?JSON.parse(cached):null);
     if(shrunk){
       // 行数が大きく減っているので、前回のデータを保持する
@@ -1888,29 +1872,16 @@ function load(){
     }
     const t=JSON.stringify(raw);
     if(t!==cached){
-      try{ localStorage.setItem(cacheKey(),t); }catch(e){}
+      try{ localStorage.setItem(CACHE_KEY,t); }catch(e){}
       DB=build(raw); render();
     }
     stat.title='';
     stat.textContent='最新（'+new Date().toLocaleTimeString('ja-JP',{hour:'2-digit',minute:'2-digit'})+'時点）';
   }).catch(err=>{
-    if(mySave!==SAVE.id) return;
     stat.textContent='取得失敗';
     if(!DB) document.getElementById('app').innerHTML=
       '<div class="loading">スプレッドシートを読み込めませんでした。<br><small>'+esc(err.message)+'</small></div>';
   });
-}
-(function initSave(){
-  // セーブ別キーに移行する前の古いキャッシュを掃除する（localStorageの容量対策）
-  try{ ['wp-cache-v1','wp-cache-v2'].forEach(k=>localStorage.removeItem(k)); }catch(e){}
-  const sel=document.getElementById('saveSel');
-  sel.innerHTML=SAVES.map(x=>'<option value="'+x.id+'"'+(x.id===SAVE.id?' selected':'')+'>'+esc(x.label)+'</option>').join('');
-  sel.onchange=()=>{
-    SAVE=SAVES.find(x=>x.id===sel.value)||SAVES[0];
-    try{ localStorage.setItem('wp-save',SAVE.id); }catch(e){}
-    load();
-  };
-  load();
 })();
 </script>
 </body>
