@@ -670,9 +670,7 @@ function computeAwards(horses,runs,years,rivals,crowns){
       // 世代別 — 生年・性別が要るので自厩舎のみ。2歳部門はG1勝ちが必須
       const ent=mine();
       for(const [label,f] of AGE_CATS){
-        let c=ent.filter(e=>e.h.birth&&f(e.h,y));
-        if(label.includes('2歳')||label.includes('3歳')) c=c.filter(e=>hasG1(e.a));
-        const b=pick(c);
+        const b=pick(ent.filter(e=>e.h.birth&&f(e.h,y)&&hasG1(e.a)));
         list.push({cat:label,win:b});
         if(b) note(b,y,region,label);
       }
@@ -686,8 +684,8 @@ function computeAwards(horses,runs,years,rivals,crowns){
       // ダート
       if(HAS_DIRT[region]){
         const df=r=>r.surface==='ダート';
-        const dt=pick(mine(df));
-        list.push({cat:'最優秀ダートホース',win:dt});
+        const dt=pick(mine(df).filter(e=>hasG1(e.a)));
+        list.push({cat:'最優秀ダートホース',win:dt,mergeJpn:true});
         if(dt) note(dt,y,region,'最優秀ダートホース');
       }
       regs[region]={count:rn.length,list,
@@ -745,10 +743,10 @@ function viewAwards(){
     +'<li>デビューから達成まで無敗ならさらに +'+num(PT_UNDEFEATED)+'</li>'
     +'</ul><h4>各部門の条件</h4><ul>'
     +'<li><b>最優秀馬</b> … G1（またはJpnⅠ）を1勝以上</li>'
-    +'<li><b>2歳・3歳部門</b> … G1（またはJpnⅠ）勝ちが必須</li>'
-    +'<li><b>4歳上部門</b> … 1勝以上</li>'
+    +'<li><b>世代別（2歳・3歳・4歳上／牡牝）</b> … G1（またはJpnⅠ）勝ちが必須</li>'
     +'<li><b>最優秀短距離馬</b> … '+SPRINT_MAX+'m以下のG1勝ち馬から選定</li>'
-    +'<li><b>最優秀ダートホース</b> … 日本とアメリカのみ</li>'
+    +'<li><b>最優秀ダートホース</b> … 日本とアメリカのみ。G1勝ちが必須で、'
+    +'この部門ではJpnⅠ勝ちもG1勝ちとして数えます</li>'
     +'<li><b>海外部門</b> … G1 '+OVERSEAS_MIN_G1+'勝以上、またはG1 1勝かつ年間賞金'+num(OVERSEAS_MIN_PRIZE)+'以上</li>'
     +'</ul></div></details>';
   for(const y of ys){
@@ -770,7 +768,8 @@ function viewAwards(){
           const a=it.win.a, rv=it.win.rival;
           h+='<div class="who">'+hlink(it.win.n)+(rv?'<span class="ext">他厩舎</span>':'')+'</div>'
             +'<div class="rec">'+(rv?a.w+'勝（判明分）':a.n+'戦'+a.w+'勝')
-            +'　G1 '+a.g1+(a.jpn1?'・JpnⅠ '+a.jpn1:'')
+            +'　G1 '+(it.mergeJpn?a.g1+a.jpn1:a.g1)
+            +(!it.mergeJpn&&a.jpn1?'・JpnⅠ '+a.jpn1:'')
             +'　'+(rv?'推定賞金':'賞金')+num(a.prize)+'</div>';
           if(a.wins.length) h+='<div class="g1">'+a.wins.map(w=>esc(w.race)).join('、')+'</div>';
           const cr=DB.crowns.byHorseYear.get(it.win.n+'|'+y)||[];
