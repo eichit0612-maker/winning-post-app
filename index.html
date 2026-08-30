@@ -396,7 +396,8 @@ async function fetchAll(){
   const out={}; SHEETS.forEach((s,i)=>out[s.key]=texts[i]); return out;
 }
 const countLines = t => (t||'').split(String.fromCharCode(10)).length;
-// 応答が途中で切れることがあるため、前回より極端に行数が減っていたら採用しない
+// シートにフィルターが掛かっていると、その絞り込み結果だけが返る。
+// 前回より極端に行数が減っていたら、一時的な状態とみなして採用しない
 function looksTruncated(raw, cachedRaw){
   if(!cachedRaw) return null;
   for(const s of SHEETS){
@@ -1859,11 +1860,11 @@ const stat=document.getElementById('status');
     try{ DB=build(JSON.parse(cached)); render(); stat.textContent='更新を確認中…'; }catch(e){ localStorage.removeItem(CACHE_KEY); }
   }
   fetchAll().then(raw=>{
-    const trunc = looksTruncated(raw, cached?JSON.parse(cached):null);
-    if(trunc){
-      // 取得が不完全なので前回のデータを保持する
-      stat.textContent='取得が不完全';
-      stat.title='読み込みが途中で切れたため前回のデータを表示しています: '+trunc;
+    const shrunk = looksTruncated(raw, cached?JSON.parse(cached):null);
+    if(shrunk){
+      // 行数が大きく減っているので、前回のデータを保持する
+      stat.textContent='データが大幅に減少';
+      stat.title='シートにフィルターが残っていませんか。前回のデータを表示しています: '+shrunk;
       return;
     }
     const s=JSON.stringify(raw);
