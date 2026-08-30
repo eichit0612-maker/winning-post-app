@@ -12,6 +12,7 @@
   --accent:#0f7a4c; --accent-soft:#ddf3e8;
   --gold:#c08a08; --gold-ink:#8a6205; --gold-soft:#fff2ce;
   --jp:#d43f38; --us:#2166cf; --eu:#7a4bc6;
+  --s1:#2a78d6; --s2:#eb6834; --s3:#1baf7a;
   --on-bright:#fff;
   --shadow:0 1px 2px rgba(16,60,40,.05),0 10px 28px rgba(16,60,40,.07);
 }
@@ -21,6 +22,7 @@
   --accent:#57d497; --accent-soft:#172b22;
   --gold:#e9c05a; --gold-ink:#f0cd75; --gold-soft:#33290f;
   --jp:#f9756c; --us:#6fa8f7; --eu:#b489f5;
+  --s1:#3987e5; --s2:#d95926; --s3:#199e70;
   --on-bright:#101713;
   --shadow:0 1px 2px rgba(0,0,0,.45),0 10px 28px rgba(0,0,0,.4);
 }
@@ -151,6 +153,20 @@ td.win{color:var(--gold-ink);font-weight:700}
 .rel span.p{color:var(--muted)}
 .rel a:hover{border-color:var(--accent);color:var(--accent);background:var(--accent-soft)}
 .lbl{font-size:11px;color:var(--muted);letter-spacing:.06em;margin-bottom:6px}
+/* ---- チャート（系列色は dataviz の検証済みスロット1〜3）---- */
+.chart{position:relative;margin-top:6px}
+.chart svg{width:100%;height:auto;display:block;overflow:visible}
+.legend{display:flex;gap:15px;flex-wrap:wrap;margin:0 0 10px;font-size:12px;color:var(--muted)}
+.lg{display:inline-flex;align-items:center;gap:6px}
+.lg i{width:11px;height:11px;border-radius:3px}
+.grid{stroke:var(--line);stroke-width:1}
+text.axis{fill:var(--muted);font-size:11px}
+text.dlabel{fill:var(--ink);font-size:12.5px;font-weight:700}
+.hit{fill:transparent;cursor:default}
+.chart .tip{position:absolute;pointer-events:none;background:var(--panel);border:1px solid var(--line);
+  border-radius:10px;box-shadow:var(--shadow);padding:8px 12px;font-size:12px;line-height:1.65;z-index:5}
+.chart .tip b{display:block;font-size:13px;margin-bottom:3px}
+.chart .tip span{display:block;color:var(--muted);font-variant-numeric:tabular-nums}
 .tabs{display:flex;gap:6px;margin-bottom:16px}
 .tabbtn{font-family:inherit;font-size:14px;font-weight:600;padding:8px 18px;border-radius:999px;
   border:1px solid var(--line);background:var(--panel);color:var(--muted);cursor:pointer;transition:.12s}
@@ -256,6 +272,7 @@ td.win{color:var(--gold-ink);font-weight:700}
 <header><div class="hd">
   <span class="brand">🏇 エアリス牧場 年史</span>
   <nav>
+    <a href="#/summary" data-r="summary">年史</a>
     <a href="#/awards" data-r="awards">年度表彰</a>
     <a href="#/horses" data-r="horses">馬一覧</a>
     <a href="#/stallions" data-r="stallions">種牡馬</a>
@@ -1505,6 +1522,161 @@ function bindCourses(){
   on('rq',v=>CF.rq=v); on('rgrade',v=>CF.rgrade=v); on('rwon',v=>CF.rwon=v); on('rsort',v=>CF.rsort=v);
 }
 
+/* ============ 画面: 年史（年度サマリー） ============ */
+// 系列色は dataviz の検証済みカテゴリカル配色スロット1〜3。
+// 全ペアでCVD ΔE 9.2以上、通常視24.0以上を確認済み。
+const SERIES = ['日本','アメリカ','欧州'];
+
+function yearlySeries(){
+  const out=[];
+  for(const y of DB.years){
+    const rs=DB.runs.filter(r=>r.year===y);
+    if(!rs.length) continue;
+    const a=agg(rs);
+    const reg={};
+    for(const k of SERIES) reg[k]=0;
+    for(const r of rs){ const h=DB.horses.get(r.name);
+      const k=h&&h.region; if(k&&reg[k]!==undefined) reg[k]+=r.prize; }
+    const champs=SERIES.map(k=>{
+      const c=(DB.awards.byYear.get(y).regs[k].list||[]).find(x=>x.cat==='最優秀馬');
+      return c&&c.win?{region:k,name:c.win.n}:null; }).filter(Boolean);
+    const crowns=[];
+    for(const [k,list] of DB.crowns.byHorseYear)
+      if(+k.slice(k.lastIndexOf('|')+1)===y)
+        for(const e of list) if(e.c.pt>0) crowns.push({horse:k.slice(0,k.lastIndexOf('|')),name:crownName(e)});
+    out.push({y, a, reg, champs, crowns, horses:new Set(rs.map(r=>r.name)).size});
+  }
+  return out;
+}
+
+// 棒グラフ（積み上げ対応）。系列が1つなら凡例なし
+function barChart(id, data, opts){
+  const W=760, H=opts.h||270, L=58, R=16, T=opts.legend?34:14, B=30;
+  const iw=W-L-R, ih=H-T-B;
+  const band=iw/data.length;
+  const bw=Math.min(24, band-10);
+  const max=opts.max||Math.max(...data.map(d=>d.total))||1;
+  const ticks=opts.ticks;
+  const y=v=>T+ih-(v/max)*ih;
+  let s='<div class="chart" id="'+id+'">';
+  if(opts.legend) s+='<div class="legend">'+opts.keys.map((k,i)=>
+      '<span class="lg"><i style="background:var(--s'+(i+1)+')"></i>'+esc(k)+'</span>').join('')+'</div>';
+  s+='<svg viewBox="0 0 '+W+' '+H+'" role="img" aria-label="'+esc(opts.aria)+'">';
+  // 目盛りとグリッド
+  for(const t of ticks){
+    const yy=y(t);
+    s+='<line class="grid" x1="'+L+'" x2="'+(W-R)+'" y1="'+yy+'" y2="'+yy+'"/>'
+      +'<text class="axis" x="'+(L-8)+'" y="'+(yy+4)+'" text-anchor="end">'+opts.fmt(t)+'</text>';
+  }
+  data.forEach((d,i)=>{
+    const cx=L+band*i+band/2;
+    let acc=0;
+    d.vals.forEach((v,j)=>{
+      if(v<=0) return;
+      const y0=y(acc), y1=y(acc+v);
+      const topSeg=!d.vals.slice(j+1).some(x=>x>0);
+      let h=y0-y1-(acc>0?2:0);       // 積み上げの境目に2pxの余白
+      if(h<1) h=1;
+      const yy=y1;
+      const r=topSeg?4:0;
+      s+='<path class="bar" fill="var(--s'+(j+1)+')" d="'
+        +'M'+(cx-bw/2)+' '+(yy+h)
+        +'V'+(yy+r)+'q0 '+(-r)+' '+r+' '+(-r)
+        +'h'+(bw-2*r)+'q'+r+' 0 '+r+' '+r
+        +'V'+(yy+h)+'Z"/>';
+      acc+=v;
+    });
+    s+='<text class="axis" x="'+cx+'" y="'+(H-10)+'" text-anchor="middle">'
+      +(data.length>10&&i%2===1?'':String(d.label).slice(2))+'</text>';
+    s+='<rect class="hit" x="'+(L+band*i)+'" y="'+T+'" width="'+band+'" height="'+ih
+      +'" data-tip="'+esc(d.tip)+'"/>';
+  });
+  // 直接ラベルは最終年のみ
+  const last=data[data.length-1];
+  if(last&&opts.endLabel)
+    s+='<text class="dlabel" x="'+(L+band*(data.length-1)+band/2)+'" y="'+(y(last.total)-9)
+      +'" text-anchor="middle">'+esc(opts.endLabel(last))+'</text>';
+  return s+'</svg><div class="tip" hidden></div></div>';
+}
+
+function viewSummary(){
+  const S=yearlySeries();
+  const maxP=Math.max(...S.map(d=>d.a.prize));
+  const stepP=maxP>1200000?500000:250000;
+  const tp=[]; for(let v=0;v<=maxP*1.05;v+=stepP) tp.push(v);
+  const maxG=Math.max(...S.map(d=>d.a.g1+d.a.jpn1));
+  const tg=[]; for(let v=0;v<=maxG*1.05;v+=20) tg.push(v);
+
+  const prizeData=S.map(d=>({
+    label:d.y, vals:SERIES.map(k=>d.reg[k]), total:d.a.prize,
+    tip:d.y+'年　獲得賞金 '+num(d.a.prize)+'\n'
+      +SERIES.map(k=>k+' '+num(d.reg[k])+'（'+Math.round(d.reg[k]/(d.a.prize||1)*100)+'%）').join('\n') }));
+  const g1Data=S.map(d=>({
+    label:d.y, vals:[d.a.g1+d.a.jpn1], total:d.a.g1+d.a.jpn1,
+    tip:d.y+'年　G1 '+(d.a.g1+d.a.jpn1)+'勝／重賞 '+d.a.gr+'勝\n'+d.a.n+'戦'+d.a.w+'勝　勝率'+rate(d.a) }));
+
+  const first=S[0], last=S[S.length-1];
+  let s='<h1>年史</h1><div class="sub">'+first.y+'年から'+last.y+'年までの'+S.length+'年間の歩みです。'
+    +'最新年は集計途中のため、前年と単純に比べられません。</div>';
+
+  // ハイライト
+  const totalP=S.reduce((t,d)=>t+d.a.prize,0), totalG1=S.reduce((t,d)=>t+d.a.g1+d.a.jpn1,0);
+  s+='<div class="card"><div class="stats">'
+    +tile(S.length+'年','活動期間')+tile(num(DB.byHorse.size),'出走した馬')
+    +tile(num(DB.runs.length),'通算出走')+tile(num(S.reduce((t,d)=>t+d.a.w,0)),'通算勝利')
+    +tile(num(totalG1),'G1勝ち')+tile(num(totalP),'通算獲得賞金')+'</div></div>';
+
+  s+='<div class="card"><h2>獲得賞金の推移</h2>'
+    +'<div class="lbl">所属地域別の内訳。1974年に初めて海外からの賞金が入り、1978年には日本以外が4割を超えました。</div>'
+    +barChart('c-prize',prizeData,{legend:true,keys:SERIES,ticks:tp,h:280,
+      fmt:v=>v>=1000000?(v/1000000)+'M':v>=1000?(v/1000)+'k':String(v),
+      aria:'年度別の獲得賞金を所属地域別に積み上げた棒グラフ',
+      endLabel:d=>num(d.total)})+'</div>';
+
+  s+='<div class="card"><h2>G1勝ち数の推移</h2>'
+    +'<div class="lbl">JpnⅠを含みます。勝率は下がっても大レースの勝ち星は伸び続けています。</div>'
+    +barChart('c-g1',g1Data,{ticks:tg,h:230,fmt:v=>String(v),
+      aria:'年度別のG1勝ち数の棒グラフ',endLabel:d=>d.total+'勝'})+'</div>';
+
+  // 年表
+  s+='<div class="card"><h2>年度別の記録</h2><div class="scroll"><table><thead><tr>'
+    +'<th class="num">年</th><th class="num">出走馬</th><th class="num">出走</th><th class="num">勝利</th>'
+    +'<th class="num">勝率</th><th class="num">重賞</th><th class="num">G1</th>'
+    +'<th class="num">獲得賞金</th><th>最優秀馬</th><th>その年の勲章</th></tr></thead><tbody>';
+  for(const d of [...S].reverse()){
+    s+='<tr><td class="num"><b><a class="link" href="#/awards">'+d.y+'</a></b></td>'
+      +'<td class="num">'+d.horses+'</td><td class="num">'+d.a.n+'</td>'
+      +'<td class="num'+(d.a.w?' win':'')+'">'+d.a.w+'</td><td class="num">'+rate(d.a)+'</td>'
+      +'<td class="num">'+(d.a.gr||'')+'</td>'
+      +'<td class="num'+(d.a.g1+d.a.jpn1?' win':'')+'">'+((d.a.g1+d.a.jpn1)||'')+'</td>'
+      +'<td class="num">'+num(d.a.prize)+'</td>'
+      +'<td>'+(d.champs.map(c=>hlink(c.name)+'<span class="dim">'+c.region+'</span>').join('、')||'<span class="none">—</span>')+'</td>'
+      +'<td>'+(d.crowns.length?'<span class="gwin">'+d.crowns.map(c=>esc(c.name)).join('、')+'</span>':'')+'</td></tr>';
+  }
+  s+='</tbody></table></div></div>';
+  return s;
+}
+
+function bindSummary(){
+  document.querySelectorAll('.chart').forEach(c=>{
+    const tip=c.querySelector('.tip');
+    c.querySelectorAll('.hit').forEach(r=>{
+      r.addEventListener('mouseenter',()=>{
+        tip.hidden=false;
+        tip.innerHTML=r.dataset.tip.split('\n').map((l,i)=>
+          i===0?'<b>'+esc(l)+'</b>':'<span>'+esc(l)+'</span>').join('');
+      });
+      r.addEventListener('mousemove',e=>{
+        const b=c.getBoundingClientRect();
+        const x=e.clientX-b.left, y=e.clientY-b.top;
+        tip.style.left=Math.min(Math.max(x,8),b.width-tip.offsetWidth-8)+'px';
+        tip.style.top=Math.max(y-tip.offsetHeight-14,4)+'px';
+      });
+      r.addEventListener('mouseleave',()=>{ tip.hidden=true; });
+    });
+  });
+}
+
 /* ============ 画面: 記録 ============ */
 let RF={ tab:'日本' };
 function viewRecords(){
@@ -1622,6 +1794,7 @@ function render(){
   else if(hash.startsWith('#/race/')){ app.innerHTML=viewRace(decodeURIComponent(hash.slice(7))); route='courses'; }
   else if(hash.startsWith('#/courses')){ app.innerHTML=viewCourses(); bindCourses(); route='courses'; }
   else if(hash.startsWith('#/records')){ app.innerHTML=viewRecords(); bindRecords(); route='records'; }
+  else if(hash.startsWith('#/summary')){ app.innerHTML=viewSummary(); bindSummary(); route='summary'; }
   else if(hash.startsWith('#/trainers')){ app.innerHTML=viewTrainers(); bindPeople('trainers'); route='trainers'; }
   else { app.innerHTML=viewAwards(); }
   document.querySelectorAll('nav a').forEach(a=>a.classList.toggle('on',a.dataset.r===route));
