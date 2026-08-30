@@ -275,8 +275,7 @@ text.dlabel{fill:var(--ink);font-size:12.5px;font-weight:700}
     <a href="#/summary" data-r="summary">年史</a>
     <a href="#/awards" data-r="awards">年度表彰</a>
     <a href="#/horses" data-r="horses">馬一覧</a>
-    <a href="#/stallions" data-r="stallions">種牡馬</a>
-    <a href="#/broodmares" data-r="broodmares">繁殖牝馬</a>
+    <a href="#/stallions" data-r="pedigree">血統</a>
     <a href="#/jockeys" data-r="jockeys">騎手</a>
     <a href="#/trainers" data-r="trainers">調教師</a>
     <a href="#/courses" data-r="courses">レース</a>
@@ -1045,6 +1044,100 @@ function bindHorses(){
 }
 
 /* ============ 画面: 種牡馬成績・繁殖牝馬成績 ============ */
+// 母をたどった先頭（牝系の根）
+const famRoot = name => {
+  let cur=nm(name||''), seen=new Set();
+  for(;;){
+    const h=DB.horses.get(cur);
+    if(!h||!h.dam) return cur;
+    const d=nm(h.dam);
+    if(seen.has(d)||!DB.horses.has(d)) return d;
+    seen.add(d); cur=d;
+  }
+};
+
+let MF={ q:'', sort:'prize', only:true };
+function matingList(){
+  const combo=new Map();
+  for(const h of DB.horses.values()){
+    if(!h.sire||!h.dam) continue;
+    const fam=famRoot(h.dam);
+    const k=nm(h.sire)+'|'+fam;
+    if(!combo.has(k)) combo.set(k,{sire:nm(h.sire),fam,list:[]});
+    combo.get(k).list.push(h);
+  }
+  const all=[...combo.values()].map(c=>{
+    const ran=c.list.filter(x=>x.runs&&x.runs.length);
+    const a=ran.map(x=>x.total);
+    return { sire:c.sire, fam:c.fam, kids:c.list, n:c.list.length, ran:ran.length,
+      w:a.filter(x=>x.w>0).length, gr:a.filter(x=>x.gr>0).length,
+      g1:a.filter(x=>x.g1+x.jpn1>0).length,
+      prize:a.reduce((s,x)=>s+x.prize,0) };
+  });
+  const multi=all.filter(x=>x.n>1).length;
+
+  let list=all.filter(x=>
+    (!MF.only||x.n>1) &&
+    (!MF.q||x.sire.includes(MF.q)||x.fam.includes(MF.q)||x.kids.some(k=>k.name.includes(MF.q))));
+  const key={ prize:x=>[-x.prize,-x.n], n:x=>[-x.n,-x.prize], g1:x=>[-x.g1,-x.prize],
+              sire:x=>[x.sire,x.fam], fam:x=>[x.fam,x.sire] }[MF.sort];
+  list.sort((a,b)=>{ const A=key(a),B=key(b);
+    for(let i=0;i<A.length;i++){ if(A[i]<B[i]) return -1; if(A[i]>B[i]) return 1; } return 0; });
+
+  let h='<div class="filters"><input id="mq" placeholder="父・牝系・産駒名で絞り込み" value="'+esc(MF.q)+'">'
+    +'<select id="msort">'
+    +[['prize','産駒賞金順'],['n','産駒数順'],['g1','G1馬の多い順'],['sire','父の名前順'],['fam','牝系の名前順']]
+      .map(([v,l])=>'<option value="'+v+'"'+(MF.sort===v?' selected':'')+'>'+l+'</option>').join('')
+    +'</select>'
+    +'<label class="chk"><input type="checkbox" id="monly"'+(MF.only?' checked':'')+'> 2頭以上の配合のみ</label>'
+    +'</div><div class="card"><div class="scroll">';
+  if(!list.length) h+='<div class="none">該当する配合がありません。</div>';
+  else{
+    h+='<table><thead><tr><th>父</th><th>牝系</th><th class="num">産駒</th><th class="num">出走</th>'
+      +'<th class="num">勝ち上がり</th><th class="num">重賞馬</th><th class="num">G1馬</th>'
+      +'<th class="num">産駒賞金</th><th>産駒</th></tr></thead><tbody>';
+    for(const x of list)
+      h+='<tr><td><b>'+hlink(x.sire)+'</b></td><td>'+hlink(x.fam)+'</td>'
+        +'<td class="num">'+x.n+'</td><td class="num">'+(x.ran||'')+'</td>'
+        +'<td class="num'+(x.w?' win':'')+'">'+(x.w||'')+'</td>'
+        +'<td class="num">'+(x.gr||'')+'</td>'
+        +'<td class="num'+(x.g1?' win':'')+'">'+(x.g1||'')+'</td>'
+        +'<td class="num">'+(x.prize?num(x.prize):'')+'</td>'
+        +'<td>'+x.kids.sort((a,b)=>(a.birth||'').localeCompare(b.birth||''))
+            .map(k=>hlink(k.name)+(k.total&&k.total.g1+k.total.jpn1?'<span class="gwin"> G1</span>':''))
+            .join('、')+'</td></tr>';
+    h+='</tbody></table>';
+  }
+  return h+'</div></div>'
+    +'<div class="note">父と母の牝系（母をたどった先頭）の組み合わせで集計しています。'
+    +'全'+all.length+'通りのうち、2頭以上の産駒がいる配合は'+multi+'通りです。'
+    +'牝系の名前をたどれない馬（母が所有馬に登録されていない場合）は、その母の名前を牝系名としています。</div>';
+}
+
+let PED={ tab:'stallions' };
+const PED_TABS=[['stallions','種牡馬'],['broodmares','繁殖牝馬'],['mating','配合分析']];
+function viewPedigree(){
+  const body = PED.tab==='mating' ? matingList() : viewBreeding(PED.tab);
+  return '<h1>血統</h1><div class="sub">所有する種牡馬・繁殖牝馬の台帳と、父と牝系の組み合わせごとの成績です。</div>'
+    +'<div class="tabs">'+PED_TABS.map(([id,l])=>
+      '<button class="tabbtn'+(PED.tab===id?' on':'')+'" data-ptab="'+id+'">'+l+'</button>').join('')+'</div>'
+    +'<div id="pedbody">'+body+'</div>';
+}
+function bindPedigree(){
+  document.querySelectorAll('.tabbtn').forEach(b=>b.onclick=()=>{
+    PED.tab=b.dataset.ptab;
+    location.hash = PED.tab==='mating' ? '#/mating' : '#/'+PED.tab;
+  });
+  if(PED.tab==='mating'){
+    const redraw=()=>{ document.getElementById('pedbody').innerHTML=matingList(); bindPedigree();
+      const i=document.getElementById('mq'); if(i&&MF.q){ i.focus(); i.setSelectionRange(i.value.length,i.value.length); } };
+    const q=document.getElementById('mq');
+    if(q){ q.oninput=e=>{ MF.q=e.target.value; redraw(); };
+      document.getElementById('msort').onchange=e=>{ MF.sort=e.target.value; redraw(); };
+      document.getElementById('monly').onchange=e=>{ MF.only=e.target.checked; redraw(); }; }
+  } else bindBreeding(PED.tab);
+}
+
 let BF={ stallions:{q:'',sort:'prize',only:false}, broodmares:{q:'',sort:'prize',only:false} };
 function viewBreeding(kind){
   const isS = kind==='stallions';
@@ -1053,7 +1146,7 @@ function viewBreeding(kind){
   const all = [...DB.horses.values()].filter(h=>h.status===(isS?'種牡馬':'繁殖'));
   const withKids = all.filter(h=>h.children.length).length;
 
-  let h='<h1>'+label+'成績</h1><div class="sub">所有する'+label+' '+all.length+'頭。'
+  let h='<div class="lbl">所有する'+label+' '+all.length+'頭。'
     +'産駒を登録しているのは'+withKids+'頭です。馬名から個別のカルテへ移動できます。</div>'
     +'<div class="filters">'
     +'<input id="bq" placeholder="馬名・父・母で絞り込み" value="'+esc(f.q)+'">'
@@ -1099,7 +1192,7 @@ function viewBreeding(kind){
 }
 function bindBreeding(kind){
   const f=BF[kind];
-  const redraw=()=>{ document.getElementById('app').innerHTML=viewBreeding(kind); bindBreeding(kind);
+  const redraw=()=>{ document.getElementById('pedbody').innerHTML=viewBreeding(kind); bindPedigree();
     const i=document.getElementById('bq'); if(i&&document.activeElement!==i&&f.q){ i.focus();
       i.setSelectionRange(i.value.length,i.value.length); } };
   const q=document.getElementById('bq'); if(!q) return;
@@ -1664,6 +1757,35 @@ function viewSummary(){
     +barChart('c-g1',g1Data,{ticks:tg,h:230,fmt:v=>String(v),
       aria:'年度別のG1勝ち数の棒グラフ',endLabel:d=>d.total+'勝'})+'</div>';
 
+  // 世代別（生年）
+  const gen=new Map();
+  for(const h of DB.horses.values()){ const y=+h.birth; if(!y) continue;
+    if(!gen.has(y)) gen.set(y,[]); gen.get(y).push(h); }
+  const gy=[...gen.keys()].sort((a,b)=>b-a);
+  if(gy.length){
+    s+='<div class="card"><h2>世代別の成績</h2>'
+      +'<div class="lbl">生年ごとの一族の成績です。デビューが遅い世代はまだ数字が伸びきっていません。</div>'
+      +'<div class="scroll"><table><thead><tr><th class="num">生年</th><th class="num">頭数</th>'
+      +'<th class="num">出走</th><th class="num">勝ち上がり</th><th class="num">重賞馬</th>'
+      +'<th class="num">G1馬</th><th class="num">獲得賞金</th><th>この世代の稼ぎ頭</th>'
+      +'</tr></thead><tbody>';
+    for(const y of gy){
+      const l=gen.get(y), ran=l.filter(x=>x.runs&&x.runs.length);
+      const a=ran.map(x=>x.total);
+      const prize=a.reduce((t,x)=>t+x.prize,0);
+      const best=[...ran].sort((p,q)=>q.total.prize-p.total.prize)[0];
+      s+='<tr><td class="num"><b>'+y+'</b></td><td class="num">'+l.length+'</td>'
+        +'<td class="num">'+(ran.length||'')+'</td>'
+        +'<td class="num'+(a.filter(x=>x.w>0).length?' win':'')+'">'+(a.filter(x=>x.w>0).length||'')+'</td>'
+        +'<td class="num">'+(a.filter(x=>x.gr>0).length||'')+'</td>'
+        +'<td class="num'+(a.filter(x=>x.g1+x.jpn1>0).length?' win':'')+'">'
+          +(a.filter(x=>x.g1+x.jpn1>0).length||'')+'</td>'
+        +'<td class="num">'+(prize?num(prize):'')+'</td>'
+        +'<td>'+(best?hlink(best.name)+'<span class="dim">'+num(best.total.prize)+'</span>':'')+'</td></tr>';
+    }
+    s+='</tbody></table></div></div>';
+  }
+
   // 年表
   s+='<div class="card"><h2>年度別の記録</h2><div class="scroll"><table><thead><tr>'
     +'<th class="num">年</th><th class="num">出走馬</th><th class="num">出走</th><th class="num">勝利</th>'
@@ -1812,8 +1934,11 @@ function render(){
   let route='awards';
   if(hash.startsWith('#/horse/')){ app.innerHTML=viewHorse(decodeURIComponent(hash.slice(8))); route='horses'; }
   else if(hash.startsWith('#/horses')){ app.innerHTML=viewHorses(); bindHorses(); route='horses'; }
-  else if(hash.startsWith('#/stallions')){ app.innerHTML=viewBreeding('stallions'); bindBreeding('stallions'); route='stallions'; }
-  else if(hash.startsWith('#/broodmares')){ app.innerHTML=viewBreeding('broodmares'); bindBreeding('broodmares'); route='broodmares'; }
+  else if(hash.startsWith('#/stallions')||hash.startsWith('#/broodmares')||hash.startsWith('#/mating')){
+    PED.tab = hash.startsWith('#/mating') ? 'mating'
+            : hash.startsWith('#/broodmares') ? 'broodmares' : 'stallions';
+    app.innerHTML=viewPedigree(); bindPedigree(); route='pedigree';
+  }
   else if(hash.startsWith('#/jockey/')){ app.innerHTML=viewJockey(decodeURIComponent(hash.slice(9))); route='jockeys'; }
   else if(hash.startsWith('#/jockeys')){ app.innerHTML=viewJockeys(); bindPeople('jockeys'); route='jockeys'; }
   else if(hash.startsWith('#/trainer/')){ app.innerHTML=viewTrainer(decodeURIComponent(hash.slice(10))); route='trainers'; }
