@@ -312,11 +312,6 @@ const CACHE_KEY = 'wp-cache-v2';
 const PT_G1 = 20000, PT_JPN1 = 10000;      // 複合スコアの加点（1着）
 const PT_2ND = 10000, PT_3RD = 4000;       // G1での2着・3着の加点（JpnⅠは半分）
 const PT_UNDEFEATED = 20000;               // 無敗での三冠達成への上乗せ
-// レーティング（ロンジン方式に倣った近似）。レースの格を1着賞金の対数で表し、着順で減点する
-const RT_A = 44.9, RT_B = 16.4;
-const RT_PEN = r => r===1?0:r===2?2:r===3?4:r===4?6:r===5?8:r<=9?12:18;
-const RT_FALLBACK = { 'G1':30000,'JPNⅠ':20000,'G2':6700,'JPNⅡ':5000,'G3':4500,'JPNⅢ':3500,
-  'L':3000,'OP':2400,'3勝クラス':1600,'2勝クラス':1190,'1勝クラス':1140,'未勝利':590,'新馬':750 };
 const OVERSEAS_MIN_G1 = 2, OVERSEAS_MIN_PRIZE = 10000;
 const SPRINT_MAX = 1400;                   // 短距離部門の上限（日本ならスプリンターズS・高松宮記念）
 const ALIAS = { 'ホーメンテスコ':'ホースメンテスコ', '二ホンピロムーテー':'ニホンピロムーテー' };
@@ -561,17 +556,6 @@ function build(raw){
     }
     if(best){ R.winPrize=best.p; R.estimated=true; }
   }
-  // レーティング: レース名ごとの最頻値をそのレースの格の指標に使う
-  // （単発の入力ミスに引きずられないため。着順に応じて減点する）
-  const modePrize=new Map();
-  for(const [n,m] of racePrize)
-    modePrize.set(n,[...m.entries()].sort((a,b)=>b[1].length-a[1].length||b[0]-a[0])[0][0]);
-  for(const R of races.values()){
-    R.quality = modePrize.get(R.race) || R.winPrize || RT_FALLBACK[G(R.grade)] || 1000;
-    for(const x of R.mine)
-      if(x.rank) x.rating = Math.round(RT_A + RT_B*Math.log10(Math.max(R.quality,300)) - RT_PEN(x.rank));
-  }
-
   // 第3段階: 他厩舎馬の戦績としてまとめる
   const rivals=new Map();   // 「馬名|年」→ その年に判明している他厩舎馬の戦績
   for(const R of races.values()){
@@ -584,16 +568,6 @@ function build(raw){
   }
   for(const v of rivals.values())
     v.region=Object.entries(v.regions).sort((a,b)=>b[1]-a[1])[0][0];
-
-  // 馬ごとのピークレーティングと上位3走平均
-  for(const h of horses.values()){
-    if(!h.runs||!h.runs.length) continue;
-    let best=null;
-    for(const r of h.runs) if(r.rating!=null&&(!best||r.rating>best.rating)) best=r;
-    h.peak=best?{r:best.rating,run:best}:null;
-    const sorted=h.runs.filter(r=>r.rating!=null).map(r=>r.rating).sort((a,b)=>b-a);
-    h.avg3=sorted.length?Math.round(sorted.slice(0,3).reduce((a,b)=>a+b,0)/Math.min(3,sorted.length)):null;
-  }
 
   // 騎手（レース結果の騎手欄から）
   const jockeys=new Map();
@@ -916,11 +890,7 @@ function viewHorse(name){
       +st(t.n,'出走')+st(t.w,'勝')+st(t.p2,'2着')+st(t.p3,'3着')
       +st(t.g1+t.jpn1,'G1勝')+st(t.gr,'重賞勝')
       +st(num(t.prize),'獲得賞金')+st((t.n?Math.round(t.w/t.n*100):0)+'%','勝率')
-      +(h.peak?st(h.peak.r,'ピークレート'):'')
-      +'</div>'
-      +(h.peak?'<div class="lbl" style="margin:12px 0 0">ピークレートは '
-        +h.peak.run.date.slice(0,4)+'年 '+esc(h.peak.run.race)+'（'+h.peak.run.rank+'着）で記録</div>':'')
-      +'</div>';
+      +'</div></div>';
   }
 
   // 3代血統表（列ごとに 2頭 / 4頭 / 8頭）
@@ -1770,41 +1740,6 @@ function recordsBody(region){
 
   let s='<div class="sub" style="margin:-8px 0 16px">'+region+'所属 '+horses.length+'頭・'
     +num(runs.length)+'走が対象です。</div>';
-
-  // レーティング
-  const rated=horses.filter(h=>h.peak).sort((a,b)=>b.peak.r-a.peak.r||b.avg3-a.avg3);
-  if(rated.length){
-    s+='<div class="card"><h2>ピークレーティング</h2>'
-      +'<div class="lbl">1走ごとにレースの格（1着賞金）と着順から算出した値の、キャリア最高。'
-      +'同値は上位3走の平均で並べています。</div>'
-      +'<div class="scroll"><table><thead><tr><th class="num">順</th><th>馬名</th>'
-      +'<th class="num">ピーク</th><th class="num">上位3走平均</th><th>記録した一戦</th>'
-      +'</tr></thead><tbody>';
-    rated.slice(0,15).forEach((h,i)=>{
-      const r=h.peak.run;
-      s+='<tr><td class="num">'+(i+1)+'</td><td><b>'+hlink(h.name)+'</b></td>'
-        +'<td class="num'+(i===0?' win':'')+'"><b>'+h.peak.r+'</b></td>'
-        +'<td class="num dim">'+h.avg3+'</td>'
-        +'<td class="dim">'+r.date.slice(0,4)+' '+esc(r.race)+' '+gradeTag(r.grade)+' '+r.rank+'着</td></tr>';
-    });
-    s+='</tbody></table></div></div>';
-    // 年度別の最高レーティング
-    const yr=[];
-    for(const y of [...DB.years].reverse()){
-      let best=null;
-      for(const r of runs) if(r.year===y&&r.rating!=null&&(!best||r.rating>best.rating)) best=r;
-      if(best) yr.push(best);
-    }
-    if(yr.length){
-      s+='<div class="card"><h2>年度別の最高レーティング</h2><div class="scroll"><table><thead><tr>'
-        +'<th class="num">年</th><th class="num">レート</th><th>馬名</th><th>一戦</th></tr></thead><tbody>';
-      for(const r of yr)
-        s+='<tr><td class="num">'+r.year+'</td><td class="num win"><b>'+r.rating+'</b></td>'
-          +'<td><b>'+hlink(r.name)+'</b></td>'
-          +'<td class="dim">'+esc(r.race)+' '+gradeTag(r.grade)+' '+r.rank+'着</td></tr>';
-      s+='</tbody></table></div></div>';
-    }
-  }
 
   s+=board('通算獲得賞金', top((a,b)=>b.total.prize-a.total.prize)
       .map(h=>({name:h.name,v:num(h.total.prize),d:rec(h)})),'獲得賞金');
