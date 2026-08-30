@@ -1506,10 +1506,26 @@ function bindCourses(){
 }
 
 /* ============ 画面: 記録 ============ */
+let RF={ tab:'日本' };
 function viewRecords(){
-  const horses=[...DB.horses.values()].filter(h=>h.runs&&h.runs.length);
+  const tab=id=>'<button class="tabbtn'+(RF.tab===id?' on':'')+'" data-rtab="'+id+'">'+id+'</button>';
+  return '<h1>記録</h1><div class="sub">所属地域ごとに通算成績の上位をまとめています。</div>'
+    +'<div class="tabs">'+REGIONS.map(tab).join('')+'</div>'
+    +'<div id="rtabbody">'+recordsBody(RF.tab)+'</div>';
+}
+function bindRecords(){
+  document.querySelectorAll('.tabbtn').forEach(b=>b.onclick=()=>{
+    RF.tab=b.dataset.rtab;
+    document.getElementById('app').innerHTML=viewRecords(); bindRecords();
+  });
+}
+function recordsBody(region){
+  const horses=[...DB.horses.values()].filter(h=>h.region===region&&h.runs&&h.runs.length);
+  const runs=DB.runs.filter(r=>{ const h=DB.horses.get(r.name); return h&&h.region===region; });
   const streak=h=>{ let best=0,cur=0;
     for(const r of h.runs){ if(r.rank===1){ cur++; best=Math.max(best,cur); } else cur=0; } return best; };
+  const rec=h=>h.total.n+'戦'+h.total.w+'勝　G1 '+(h.total.g1+h.total.jpn1);
+  const top=(f,n)=>[...horses].sort(f).slice(0,n||10);
   const board=(title,rows,unit,note)=>{
     let s='<div class="card"><h2>'+title+'</h2>';
     if(note) s+='<div class="lbl">'+note+'</div>';
@@ -1523,12 +1539,10 @@ function viewRecords(){
     }
     return s+'</div>';
   };
-  const rec = h => h.total.n+'戦'+h.total.w+'勝　G1 '+(h.total.g1+h.total.jpn1);
-  const top = (f,n) => [...horses].sort(f).slice(0,n||10);
+  if(!horses.length) return '<div class="card"><div class="none">'+region+'所属の出走記録がありません。</div></div>';
 
-  let s='<h1>記録</h1><div class="sub">'+horses.length+'頭・'+num(DB.runs.length)+'走の中から、'
-    +'通算成績の上位を集計しています。</div>';
-
+  let s='<div class="sub" style="margin:-8px 0 16px">'+region+'所属 '+horses.length+'頭・'
+    +num(runs.length)+'走が対象です。</div>';
   s+=board('通算獲得賞金', top((a,b)=>b.total.prize-a.total.prize)
       .map(h=>({name:h.name,v:num(h.total.prize),d:rec(h)})),'獲得賞金');
   s+=board('G1勝ち数', top((a,b)=>(b.total.g1+b.total.jpn1)-(a.total.g1+a.total.jpn1)||b.total.prize-a.total.prize)
@@ -1538,36 +1552,39 @@ function viewRecords(){
   const qual=horses.filter(h=>h.total.n>=8);
   s+=board('勝率', [...qual].sort((a,b)=>b.total.w/b.total.n-a.total.w/a.total.n).slice(0,10)
       .map(h=>({name:h.name,v:Math.round(h.total.w/h.total.n*100)+'%',d:rec(h)})),'勝率','8戦以上が対象');
-  s+=board('連勝記録', [...horses].map(h=>({h,s:streak(h)})).sort((a,b)=>b.s-a.s).slice(0,10)
+  s+=board('連勝記録', [...horses].map(h=>({h,s:streak(h)})).filter(x=>x.s>=2)
+      .sort((a,b)=>b.s-a.s).slice(0,10)
       .map(x=>({name:x.h.name,v:x.s+'連勝',d:rec(x.h)})),'連勝');
-  const perfect=horses.filter(h=>h.total.n>=5&&h.total.n===h.total.w)
-      .sort((a,b)=>b.total.n-a.total.n);
-  s+=board('無敗のまま引退', perfect.map(h=>({name:h.name,v:h.total.n+'戦'+h.total.w+'勝',d:rec(h)})),'成績','5戦以上が対象');
+  s+=board('無敗のまま引退', horses.filter(h=>h.total.n>=5&&h.total.n===h.total.w)
+      .sort((a,b)=>b.total.n-a.total.n)
+      .map(h=>({name:h.name,v:h.total.n+'戦'+h.total.w+'勝',d:rec(h)})),'成績','5戦以上が対象');
 
-  // 年度別の最高賞金
+  // 年度別の最高獲得賞金
   const rows=[];
   for(const y of [...DB.years].reverse()){
-    const rs=DB.runs.filter(r=>r.year===y);
+    const rs=runs.filter(r=>r.year===y);
+    if(!rs.length) continue;
     const names=[...new Set(rs.map(r=>r.name))];
     let best=null;
     for(const n of names){ const a=agg(rs.filter(r=>r.name===n));
       if(!best||a.prize>best.a.prize) best={n,a}; }
     if(best) rows.push({y,n:best.n,a:best.a});
   }
-  s+='<div class="card"><h2>年度別の最高獲得賞金</h2><div class="scroll"><table><thead><tr>'
-    +'<th class="num">年</th><th>馬名</th><th>成績</th><th class="num">獲得賞金</th></tr></thead><tbody>';
-  for(const r of rows)
-    s+='<tr><td class="num">'+r.y+'</td><td><b>'+hlink(r.n)+'</b></td>'
-      +'<td class="dim">'+r.a.n+'戦'+r.a.w+'勝　G1 '+(r.a.g1+r.a.jpn1)+'</td>'
-      +'<td class="num">'+num(r.a.prize)+'</td></tr>';
-  s+='</tbody></table></div></div>';
+  if(rows.length){
+    s+='<div class="card"><h2>年度別の最高獲得賞金</h2><div class="scroll"><table><thead><tr>'
+      +'<th class="num">年</th><th>馬名</th><th>成績</th><th class="num">獲得賞金</th></tr></thead><tbody>';
+    for(const r of rows)
+      s+='<tr><td class="num">'+r.y+'</td><td><b>'+hlink(r.n)+'</b></td>'
+        +'<td class="dim">'+r.a.n+'戦'+r.a.w+'勝　G1 '+(r.a.g1+r.a.jpn1)+'</td>'
+        +'<td class="num">'+num(r.a.prize)+'</td></tr>';
+    s+='</tbody></table></div></div>';
+  }
 
-  // 騎手・調教師
+  // 騎手・調教師（その地域の所属馬に限定して集計）
   const pboard=(title,map,linkFn,keyLabel,runLabel)=>{
-    // 騎手は出走レコードの配列、調教師は管理馬の配列を持つ
-    const flat=v=>(v[0]&&'rank' in v[0])?v:v.flatMap(h=>h.runs||[]);
-    const list=[...map.entries()].map(([k,v])=>({k,a:agg(flat(v))}))
-      .sort((a,b)=>b.a.w-a.a.w||b.a.prize-a.a.prize).slice(0,10);
+    const list=[...map.entries()].map(([k,l])=>({k,a:agg(l)}))
+      .filter(x=>x.a.n>0).sort((a,b)=>b.a.w-a.a.w||b.a.prize-a.a.prize).slice(0,10);
+    if(!list.length) return '';
     let t='<div class="card"><h2>'+title+'</h2><div class="scroll"><table><thead><tr>'
       +'<th class="num">順</th><th>'+keyLabel+'</th><th class="num">'+runLabel+'</th><th class="num">1着</th>'
       +'<th class="num">勝率</th><th class="num">G1</th><th class="num">獲得賞金</th></tr></thead><tbody>';
@@ -1577,8 +1594,14 @@ function viewRecords(){
       +'<td class="num">'+((x.a.g1+x.a.jpn1)||'')+'</td><td class="num">'+num(x.a.prize)+'</td></tr>'; });
     return t+'</tbody></table></div></div>';
   };
-  s+=pboard('騎手 通算勝利数',DB.jockeys,jlink,'騎手','騎乗');
-  s+=pboard('調教師 通算勝利数',DB.trainers,tlink,'調教師','出走');
+  const jm=new Map();
+  for(const r of runs){ const k=r.jockey; if(!k) continue;
+    if(!jm.has(k)) jm.set(k,[]); jm.get(k).push(r); }
+  const tm=new Map();
+  for(const h of horses){ const k=h.trainer; if(!k) continue;
+    if(!tm.has(k)) tm.set(k,[]); tm.get(k).push(...(h.runs||[])); }
+  s+=pboard(region+'での騎手 通算勝利数',jm,jlink,'騎手','騎乗');
+  s+=pboard(region+'所属馬の調教師 通算勝利数',tm,tlink,'調教師','出走');
   return s;
 }
 
@@ -1598,7 +1621,7 @@ function render(){
   else if(hash.startsWith('#/venue/')){ app.innerHTML=viewVenue(decodeURIComponent(hash.slice(8))); route='courses'; }
   else if(hash.startsWith('#/race/')){ app.innerHTML=viewRace(decodeURIComponent(hash.slice(7))); route='courses'; }
   else if(hash.startsWith('#/courses')){ app.innerHTML=viewCourses(); bindCourses(); route='courses'; }
-  else if(hash.startsWith('#/records')){ app.innerHTML=viewRecords(); route='records'; }
+  else if(hash.startsWith('#/records')){ app.innerHTML=viewRecords(); bindRecords(); route='records'; }
   else if(hash.startsWith('#/trainers')){ app.innerHTML=viewTrainers(); bindPeople('trainers'); route='trainers'; }
   else { app.innerHTML=viewAwards(); }
   document.querySelectorAll('nav a').forEach(a=>a.classList.toggle('on',a.dataset.r===route));
