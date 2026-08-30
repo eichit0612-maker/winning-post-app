@@ -151,6 +151,11 @@ td.win{color:var(--gold-ink);font-weight:700}
 .rel span.p{color:var(--muted)}
 .rel a:hover{border-color:var(--accent);color:var(--accent);background:var(--accent-soft)}
 .lbl{font-size:11px;color:var(--muted);letter-spacing:.06em;margin-bottom:6px}
+.tabs{display:flex;gap:6px;margin-bottom:16px}
+.tabbtn{font-family:inherit;font-size:14px;font-weight:600;padding:8px 18px;border-radius:999px;
+  border:1px solid var(--line);background:var(--panel);color:var(--muted);cursor:pointer;transition:.12s}
+.tabbtn:hover{color:var(--ink);border-color:var(--accent)}
+.tabbtn.on{background:var(--accent);border-color:var(--accent);color:var(--on-bright)}
 .note{font-size:12px;color:var(--muted);line-height:1.8;padding:0 4px}
 .dim{opacity:.62;font-size:.88em}
 .gwin{color:var(--gold-ink);font-size:12px}
@@ -257,6 +262,8 @@ td.win{color:var(--gold-ink);font-weight:700}
     <a href="#/broodmares" data-r="broodmares">繁殖牝馬</a>
     <a href="#/jockeys" data-r="jockeys">騎手</a>
     <a href="#/trainers" data-r="trainers">調教師</a>
+    <a href="#/courses" data-r="courses">レース</a>
+    <a href="#/records" data-r="records">記録</a>
   </nav>
   <div class="search">
     <input id="q" type="search" placeholder="馬名で検索…" autocomplete="off">
@@ -282,6 +289,7 @@ const SHEETS = [
   { key:'jockeyMO',  gid:776150858 },    // 海外騎手マスタ
   { key:'trainerM',  gid:1019895905 },   // 調教師マスタ
   { key:'trainerMO', gid:2023682065 },   // 海外調教師マスタ
+  { key:'raceMaster', gid:769926424 },   // レースマスタ
 ];
 const CACHE_KEY = 'wp-cache-v2';
 const PT_G1 = 20000, PT_JPN1 = 10000;      // 複合スコアの加点（1着）
@@ -532,7 +540,7 @@ function build(raw){
   const crowns=computeCrowns(runs);
   const awards=computeAwards(horses,runs,years,rivals,crowns);
   return { horses, runs, byHorse, years, awards, rivals, races, jockeys, trainers,
-           jockeyMeta, trainerMeta, crowns };
+           jockeyMeta, trainerMeta, crowns, raceMaster:d.raceMaster };
 }
 
 const G = g => (g||'').replace(/[.．]/g,'');
@@ -1248,6 +1256,332 @@ function bindPeople(kind){
   document.getElementById('psort').onchange=e=>{ f.sort=e.target.value; redraw(); };
 }
 
+/* ============ 画面: 競馬場・重賞レース ============ */
+const shortPlace = p => (p||'').replace('競馬場','');
+const rate2 = a => a.n ? Math.round((a.w+a.p2)/a.n*100)+'%' : '';
+const trainerOf = n => { const h=DB.horses.get(n); return h?(h.trainer||''):''; };
+const DIST_BANDS = [['〜1400',d=>d<=1400],['1600',d=>d>1400&&d<=1600],['1800-2000',d=>d>1600&&d<=2000],
+                    ['2100-2400',d=>d>2000&&d<=2400],['2500〜',d=>d>2400]];
+const CONDS = ['良','稍重','重','不良'];
+
+// 出走・着度数の共通テーブル
+function recTable(rows, head){
+  let s='<div class="scroll"><table><thead><tr><th>'+head+'</th><th class="num">出走</th>'
+    +'<th class="num">1着</th><th class="num">2着</th><th class="num">3着</th>'
+    +'<th class="num">勝率</th><th class="num">連対率</th><th class="num">重賞</th>'
+    +'<th class="num">G1</th><th class="num">獲得賞金</th></tr></thead><tbody>';
+  for(const [label,a] of rows){
+    if(!a.n) continue;
+    s+='<tr><td>'+label+'</td><td class="num">'+a.n+'</td>'
+      +'<td class="num'+(a.w?' win':'')+'">'+(a.w||'')+'</td><td class="num">'+(a.p2||'')+'</td>'
+      +'<td class="num">'+(a.p3||'')+'</td><td class="num">'+rate(a)+'</td><td class="num">'+rate2(a)+'</td>'
+      +'<td class="num">'+(a.gr||'')+'</td>'
+      +'<td class="num'+(a.g1+a.jpn1?' win':'')+'">'+((a.g1+a.jpn1)||'')+'</td>'
+      +'<td class="num">'+num(a.prize)+'</td></tr>';
+  }
+  return s+'</tbody></table></div>';
+}
+
+let CF={ tab:'venue', vq:'', vsort:'n', rq:'', rgrade:'', rwon:'', rsort:'name' };
+
+function viewCourses(){
+  const tab=(id,label)=>'<button class="tabbtn'+(CF.tab===id?' on':'')+'" data-tab="'+id+'">'+label+'</button>';
+  return '<h1>レース</h1><div class="sub">競馬場ごとの適性と、重賞レースごとの戦績をまとめています。</div>'
+    +'<div class="tabs">'+tab('venue','競馬場別')+tab('race','重賞レース別')+'</div>'
+    +'<div id="tabbody">'+(CF.tab==='venue'?venueList():raceList())+'</div>';
+}
+
+function venueList(){
+  const by=new Map();
+  for(const r of DB.runs){ const k=r.place; if(!k) continue;
+    if(!by.has(k)) by.set(k,[]); by.get(k).push(r); }
+  let list=[...by.entries()].map(([place,rs])=>({
+    place, rs, a:agg(rs), region:venueRegion(place),
+    turf:agg(rs.filter(r=>r.surface==='芝')), dirt:agg(rs.filter(r=>r.surface==='ダート')) }));
+  if(CF.vq) list=list.filter(x=>x.place.includes(CF.vq));
+  const key={ n:x=>[-x.a.n], w:x=>[-x.a.w], rate:x=>[-(x.a.n?x.a.w/x.a.n:0)],
+              prize:x=>[-x.a.prize], g1:x=>[-(x.a.g1+x.a.jpn1)], name:x=>[x.place] }[CF.vsort];
+  list.sort((a,b)=>{ const A=key(a),B=key(b);
+    for(let i=0;i<A.length;i++){ if(A[i]<B[i]) return -1; if(A[i]>B[i]) return 1; } return 0; });
+
+  let h='<div class="filters"><input id="vq" placeholder="競馬場名で絞り込み" value="'+esc(CF.vq)+'">'
+    +'<select id="vsort">'
+    +[['n','出走数順'],['w','勝利数順'],['rate','勝率順'],['prize','獲得賞金順'],['g1','G1勝ち順'],['name','名前順']]
+      .map(([v,l])=>'<option value="'+v+'"'+(CF.vsort===v?' selected':'')+'>'+l+'</option>').join('')
+    +'</select></div><div class="card"><div class="scroll"><table><thead><tr>'
+    +'<th>競馬場</th><th>地域</th><th class="num">出走</th><th class="num">1着</th>'
+    +'<th class="num">勝率</th><th class="num">連対率</th>'
+    +'<th class="num">芝</th><th class="num">ダート</th>'
+    +'<th class="num">重賞</th><th class="num">G1</th><th class="num">獲得賞金</th></tr></thead><tbody>';
+  const sub=a=>a.n?a.n+'走 <span class="dim">'+rate(a)+'</span>':'';
+  for(const x of list)
+    h+='<tr><td><b><a class="link" href="#/venue/'+encodeURIComponent(x.place)+'">'+esc(shortPlace(x.place))+'</a></b></td>'
+      +'<td>'+esc(x.region)+'</td><td class="num">'+x.a.n+'</td>'
+      +'<td class="num'+(x.a.w?' win':'')+'">'+(x.a.w||'')+'</td>'
+      +'<td class="num">'+rate(x.a)+'</td><td class="num">'+rate2(x.a)+'</td>'
+      +'<td class="num">'+sub(x.turf)+'</td><td class="num">'+sub(x.dirt)+'</td>'
+      +'<td class="num">'+(x.a.gr||'')+'</td>'
+      +'<td class="num'+(x.a.g1+x.a.jpn1?' win':'')+'">'+((x.a.g1+x.a.jpn1)||'')+'</td>'
+      +'<td class="num">'+num(x.a.prize)+'</td></tr>';
+  return h+'</tbody></table></div></div>'
+    +'<div class="note">'+by.size+'競馬場・'+num(DB.runs.length)+'走を集計しています。競馬場名から個別ページへ移動できます。</div>';
+}
+
+function viewVenue(place){
+  const rs=DB.runs.filter(r=>r.place===place);
+  if(!rs.length) return '<h1>該当なし</h1><div class="sub">「'+esc(place)+'」の出走記録はありません。</div>';
+  const a=agg(rs);
+  let s='<div class="card"><div class="hero-h"><div class="name">'+esc(shortPlace(place))+'</div>'
+    +'<div class="tags"><span class="tag">'+esc(venueRegion(place))+'</span></div></div>'
+    +'<div class="stats" style="margin-top:16px">'
+    +tile(a.n,'出走')+tile(a.w,'1着')+tile(a.p2,'2着')+tile(a.p3,'3着')
+    +tile(rate(a),'勝率')+tile(rate2(a),'連対率')+tile(a.g1+a.jpn1,'G1勝')+tile(num(a.prize),'獲得賞金')
+    +'</div></div>';
+
+  // 馬場別・距離別・馬場状態別
+  s+='<div class="card"><h2>馬場別</h2>'
+    +recTable([['芝',agg(rs.filter(r=>r.surface==='芝'))],['ダート',agg(rs.filter(r=>r.surface==='ダート'))]],'馬場')
+    +'</div>';
+  s+='<div class="card"><h2>距離別</h2>'
+    +recTable(DIST_BANDS.map(([l,f])=>[l,agg(rs.filter(r=>r.dist&&f(r.dist)))]),'距離')+'</div>';
+  s+='<div class="card"><h2>馬場状態別</h2>'
+    +recTable(CONDS.map(c=>[c,agg(rs.filter(r=>r.cond===c))]),'状態')+'</div>';
+
+  // 勝利騎手・勝利調教師
+  const rank=(keyFn,label,linkFn)=>{
+    const m=new Map();
+    for(const r of rs){ const k=keyFn(r); if(!k) continue;
+      if(!m.has(k)) m.set(k,[]); m.get(k).push(r); }
+    const list=[...m.entries()].map(([k,l])=>({k,a:agg(l)}))
+      .filter(x=>x.a.w>0).sort((x,y)=>y.a.w-x.a.w||y.a.prize-x.a.prize);
+    if(!list.length) return '<div class="none">勝利がありません。</div>';
+    let t='<div class="scroll"><table><thead><tr><th>'+label+'</th><th class="num">騎乗</th>'
+      +'<th class="num">1着</th><th class="num">勝率</th><th class="num">重賞</th>'
+      +'<th class="num">G1</th><th class="num">獲得賞金</th></tr></thead><tbody>';
+    for(const x of list)
+      t+='<tr><td><b>'+linkFn(x.k)+'</b></td><td class="num">'+x.a.n+'</td>'
+        +'<td class="num win">'+x.a.w+'</td><td class="num">'+rate(x.a)+'</td>'
+        +'<td class="num">'+(x.a.gr||'')+'</td>'
+        +'<td class="num'+(x.a.g1+x.a.jpn1?' win':'')+'">'+((x.a.g1+x.a.jpn1)||'')+'</td>'
+        +'<td class="num">'+num(x.a.prize)+'</td></tr>';
+    return t+'</tbody></table></div>';
+  };
+  s+='<div class="card"><h2>勝利騎手</h2>'+rank(r=>r.jockey,'騎手',jlink)+'</div>';
+  s+='<div class="card"><h2>勝利調教師</h2>'+rank(r=>trainerOf(r.name),'調教師',tlink)+'</div>';
+
+  // この競馬場での重賞勝ち鞍
+  const big=rs.filter(r=>r.rank===1&&isGraded(r.grade)).sort((x,y)=>y.date.localeCompare(x.date));
+  s+='<div class="card"><h2>重賞勝ち鞍 '+big.length+'勝</h2>';
+  if(!big.length) s+='<div class="none">重賞勝ちはありません。</div>';
+  else{
+    s+='<div class="scroll"><table><thead><tr><th>日付</th><th>レース名</th><th>格</th>'
+      +'<th>馬名</th><th>騎手</th><th class="num">賞金</th></tr></thead><tbody>';
+    for(const r of big)
+      s+='<tr><td>'+esc(r.date)+'</td><td><b>'+raceLink(r.race)+'</b></td><td>'+gradeTag(r.grade)+'</td>'
+        +'<td>'+hlink(r.name)+'</td><td>'+(r.jockey?jlink(r.jockey):'')+'</td>'
+        +'<td class="num">'+num(r.prize)+'</td></tr>';
+    s+='</tbody></table></div>';
+  }
+  return s+'</div>';
+}
+
+const raceLink = n => '<a class="link" href="#/race/'+encodeURIComponent(n)+'">'+esc(n)+'</a>';
+
+function raceList(){
+  // レースマスタの重賞＋実際に出走した重賞
+  const info=new Map();
+  for(const r of DB.raceMaster||[]) if(isGraded(r['G']))
+    info.set(r['レース名'],{grade:r['G'],place:r['場所'],dist:+r['距離']||0,surface:r['馬場'],month:r['月']});
+  for(const r of DB.runs) if(isGraded(r.grade)&&!info.has(r.race))
+    info.set(r.race,{grade:r.grade,place:r.place,dist:r.dist,surface:r.surface,month:r.date.split('/')[1]});
+  const runsBy=new Map();
+  for(const r of DB.runs){ if(!info.has(r.race)) continue;
+    if(!runsBy.has(r.race)) runsBy.set(r.race,[]); runsBy.get(r.race).push(r); }
+
+  let list=[...info.entries()].map(([name,i])=>{
+    const rs=runsBy.get(name)||[];
+    const wins=rs.filter(r=>r.rank===1).sort((a,b)=>a.date.localeCompare(b.date));
+    return {name,i,a:agg(rs),wins,region:venueRegion(i.place)};
+  });
+  if(CF.rq) list=list.filter(x=>x.name.includes(CF.rq)||shortPlace(x.i.place).includes(CF.rq));
+  if(CF.rgrade) list=list.filter(x=>G(x.i.grade)===CF.rgrade);
+  if(CF.rwon==='won') list=list.filter(x=>x.wins.length);
+  if(CF.rwon==='not') list=list.filter(x=>!x.wins.length);
+  const key={ name:x=>[x.name], w:x=>[-x.wins.length,-x.a.n], n:x=>[-x.a.n],
+              grade:x=>[['G1','JPNⅠ','G2','JPNⅡ','G3','JPNⅢ'].indexOf(G(x.i.grade)),x.name],
+              dist:x=>[x.i.dist,x.name] }[CF.rsort];
+  list.sort((a,b)=>{ const A=key(a),B=key(b);
+    for(let i=0;i<A.length;i++){ if(A[i]<B[i]) return -1; if(A[i]>B[i]) return 1; } return 0; });
+
+  const grades=['G1','JPNⅠ','G2','JPNⅡ','G3','JPNⅢ'];
+  let h='<div class="filters"><input id="rq" placeholder="レース名・競馬場で絞り込み" value="'+esc(CF.rq)+'">'
+    +'<select id="rgrade"><option value="">すべての格</option>'
+    +grades.map(g=>'<option value="'+g+'"'+(CF.rgrade===g?' selected':'')+'>'+g+'</option>').join('')+'</select>'
+    +'<select id="rwon"><option value="">勝敗を問わない</option>'
+    +'<option value="won"'+(CF.rwon==='won'?' selected':'')+'>勝ったことがある</option>'
+    +'<option value="not"'+(CF.rwon==='not'?' selected':'')+'>まだ勝っていない</option></select>'
+    +'<select id="rsort">'
+    +[['name','名前順'],['grade','格順'],['w','勝利数順'],['n','出走数順'],['dist','距離順']]
+      .map(([v,l])=>'<option value="'+v+'"'+(CF.rsort===v?' selected':'')+'>'+l+'</option>').join('')
+    +'</select></div>';
+  const totalWon=[...info.keys()].filter(n=>(runsBy.get(n)||[]).some(r=>r.rank===1)).length;
+  h+='<div class="card"><div class="scroll"><table><thead><tr><th>レース名</th><th>格</th>'
+    +'<th>競馬場</th><th class="num">距離</th><th>馬場</th><th class="num">出走</th>'
+    +'<th class="num">勝利</th><th>勝ち馬</th></tr></thead><tbody>';
+  for(const x of list)
+    h+='<tr><td><b>'+raceLink(x.name)+'</b></td><td>'+gradeTag(x.i.grade)+'</td>'
+      +'<td>'+esc(shortPlace(x.i.place))+'</td><td class="num">'+(x.i.dist||'')+'</td>'
+      +'<td>'+esc(x.i.surface||'')+'</td><td class="num">'+(x.a.n||'')+'</td>'
+      +'<td class="num'+(x.wins.length?' win':'')+'">'+(x.wins.length||'')+'</td>'
+      +'<td>'+(x.wins.length?x.wins.map(w=>w.date.slice(0,4)+' '+hlink(w.name)).join('、')
+              :'<span class="none">—</span>')+'</td></tr>';
+  return h+'</tbody></table></div></div>'
+    +'<div class="note">重賞'+info.size+'件のうち'+totalWon+'件で勝利があります。'
+    +'「まだ勝っていない」で絞り込むと、未制覇の重賞が一覧できます。</div>';
+}
+
+function viewRace(name){
+  const rs=DB.runs.filter(r=>r.race===name).sort((a,b)=>a.date.localeCompare(b.date));
+  const mi=(DB.raceMaster||[]).find(r=>r['レース名']===name);
+  if(!rs.length&&!mi) return '<h1>該当なし</h1><div class="sub">「'+esc(name)+'」は登録されていません。</div>';
+  const i= mi ? {grade:mi['G'],place:mi['場所'],dist:+mi['距離']||0,surface:mi['馬場'],month:mi['月']}
+              : {grade:rs[0].grade,place:rs[0].place,dist:rs[0].dist,surface:rs[0].surface,month:rs[0].date.split('/')[1]};
+  const a=agg(rs);
+  let s='<div class="card"><div class="hero-h"><div class="name">'+esc(name)+'</div>'
+    +'<div class="tags"><span class="tag">'+esc(G(i.grade))+'</span></div></div>'
+    +'<div class="facts">'
+    +'<div><span>競馬場</span>'+(i.place?'<a class="link" href="#/venue/'+encodeURIComponent(i.place)+'">'+esc(shortPlace(i.place))+'</a>':'—')+'</div>'
+    +'<div><span>距離</span>'+(i.dist||'—')+'m</div>'
+    +'<div><span>馬場</span>'+esc(i.surface||'—')+'</div>'
+    +'<div><span>施行月</span>'+(i.month?i.month+'月':'—')+'</div>'
+    +'</div></div>';
+  if(rs.length) s+='<div class="card"><h2>自厩舎の成績</h2><div class="stats">'
+    +tile(a.n,'出走')+tile(a.w,'1着')+tile(a.p2,'2着')+tile(a.p3,'3着')
+    +tile(rate(a),'勝率')+tile(num(a.prize),'獲得賞金')+'</div></div>';
+
+  // 歴代優勝馬（自厩舎＋他厩舎）
+  const byYear=new Map();
+  for(const R of DB.races.values()) if(R.race===name&&R.winner)
+    byYear.set(R.year,{year:R.year,date:R.date,winner:R.winner,owned:R.owned,prize:R.winPrize,est:R.estimated});
+  const years=[...byYear.values()].sort((a,b)=>b.year-a.year);
+  s+='<div class="card"><h2>歴代優勝馬 '+years.length+'年ぶん</h2>';
+  if(!years.length) s+='<div class="none">勝ち馬が判明している年がありません。</div>';
+  else{
+    s+='<div class="scroll"><table><thead><tr><th class="num">年</th><th>優勝馬</th><th></th>'
+      +'<th class="num">1着賞金</th></tr></thead><tbody>';
+    for(const y of years)
+      s+='<tr><td class="num">'+y.year+'</td><td><b>'+(y.owned?hlink(y.winner):esc(y.winner))+'</b></td>'
+        +'<td>'+(y.owned?'':'<span class="ext">他厩舎</span>')+'</td>'
+        +'<td class="num">'+(y.prize?num(y.prize)+(y.est?'<span class="dim">（推定）</span>':''):'')+'</td></tr>';
+    s+='</tbody></table></div>';
+  }
+  s+='</div>';
+
+  if(rs.length){
+    s+='<div class="card"><h2>自厩舎の出走履歴 '+rs.length+'走</h2><div class="scroll"><table><thead><tr>'
+      +'<th>日付</th><th>馬名</th><th>状態</th><th class="num">人気</th><th class="num">着順</th>'
+      +'<th>タイム</th><th>騎手</th><th class="num">賞金</th></tr></thead><tbody>';
+    for(const r of [...rs].reverse())
+      s+='<tr><td>'+esc(r.date)+'</td><td><b>'+hlink(r.name)+'</b></td><td>'+esc(r.cond||'')+'</td>'
+        +'<td class="num">'+esc(r.pop)+'</td>'
+        +'<td class="num'+(r.rank===1?' win':'')+'">'+(r.rank||'')+'</td>'
+        +'<td>'+esc((r.time||'').replace(/[(（][^)）]*[)）]\s*$/,''))+'</td>'
+        +'<td>'+(r.jockey?jlink(r.jockey):'')+'</td>'
+        +'<td class="num">'+(r.prize?num(r.prize):'')+'</td></tr>';
+    s+='</tbody></table></div></div>';
+  }
+  return s;
+}
+
+function bindCourses(){
+  document.querySelectorAll('.tabbtn').forEach(b=>b.onclick=()=>{
+    CF.tab=b.dataset.tab;
+    document.getElementById('app').innerHTML=viewCourses(); bindCourses();
+  });
+  const redraw=()=>{ document.getElementById('tabbody').innerHTML=CF.tab==='venue'?venueList():raceList(); bindCourses(); };
+  const on=(id,fn)=>{ const e=document.getElementById(id); if(e) e[e.tagName==='INPUT'?'oninput':'onchange']=ev=>{ fn(ev.target.value); redraw();
+    const i=document.getElementById(id); if(i&&i.tagName==='INPUT'){ i.focus(); i.setSelectionRange(i.value.length,i.value.length); } }; };
+  on('vq',v=>CF.vq=v); on('vsort',v=>CF.vsort=v);
+  on('rq',v=>CF.rq=v); on('rgrade',v=>CF.rgrade=v); on('rwon',v=>CF.rwon=v); on('rsort',v=>CF.rsort=v);
+}
+
+/* ============ 画面: 記録 ============ */
+function viewRecords(){
+  const horses=[...DB.horses.values()].filter(h=>h.runs&&h.runs.length);
+  const streak=h=>{ let best=0,cur=0;
+    for(const r of h.runs){ if(r.rank===1){ cur++; best=Math.max(best,cur); } else cur=0; } return best; };
+  const board=(title,rows,unit,note)=>{
+    let s='<div class="card"><h2>'+title+'</h2>';
+    if(note) s+='<div class="lbl">'+note+'</div>';
+    if(!rows.length) s+='<div class="none">該当なし</div>';
+    else{
+      s+='<div class="scroll"><table><thead><tr><th class="num">順</th><th>馬名</th>'
+        +'<th class="num">'+unit+'</th><th>内訳</th></tr></thead><tbody>';
+      rows.forEach((r,i)=>{ s+='<tr><td class="num">'+(i+1)+'</td><td><b>'+hlink(r.name)+'</b></td>'
+        +'<td class="num'+(i===0?' win':'')+'">'+r.v+'</td><td class="dim">'+r.d+'</td></tr>'; });
+      s+='</tbody></table></div>';
+    }
+    return s+'</div>';
+  };
+  const rec = h => h.total.n+'戦'+h.total.w+'勝　G1 '+(h.total.g1+h.total.jpn1);
+  const top = (f,n) => [...horses].sort(f).slice(0,n||10);
+
+  let s='<h1>記録</h1><div class="sub">'+horses.length+'頭・'+num(DB.runs.length)+'走の中から、'
+    +'通算成績の上位を集計しています。</div>';
+
+  s+=board('通算獲得賞金', top((a,b)=>b.total.prize-a.total.prize)
+      .map(h=>({name:h.name,v:num(h.total.prize),d:rec(h)})),'獲得賞金');
+  s+=board('G1勝ち数', top((a,b)=>(b.total.g1+b.total.jpn1)-(a.total.g1+a.total.jpn1)||b.total.prize-a.total.prize)
+      .map(h=>({name:h.name,v:(h.total.g1+h.total.jpn1)+'勝',d:rec(h)})),'G1勝ち');
+  s+=board('通算勝利数', top((a,b)=>b.total.w-a.total.w||b.total.prize-a.total.prize)
+      .map(h=>({name:h.name,v:h.total.w+'勝',d:rec(h)})),'勝利数');
+  const qual=horses.filter(h=>h.total.n>=8);
+  s+=board('勝率', [...qual].sort((a,b)=>b.total.w/b.total.n-a.total.w/a.total.n).slice(0,10)
+      .map(h=>({name:h.name,v:Math.round(h.total.w/h.total.n*100)+'%',d:rec(h)})),'勝率','8戦以上が対象');
+  s+=board('連勝記録', [...horses].map(h=>({h,s:streak(h)})).sort((a,b)=>b.s-a.s).slice(0,10)
+      .map(x=>({name:x.h.name,v:x.s+'連勝',d:rec(x.h)})),'連勝');
+  const perfect=horses.filter(h=>h.total.n>=5&&h.total.n===h.total.w)
+      .sort((a,b)=>b.total.n-a.total.n);
+  s+=board('無敗のまま引退', perfect.map(h=>({name:h.name,v:h.total.n+'戦'+h.total.w+'勝',d:rec(h)})),'成績','5戦以上が対象');
+
+  // 年度別の最高賞金
+  const rows=[];
+  for(const y of [...DB.years].reverse()){
+    const rs=DB.runs.filter(r=>r.year===y);
+    const names=[...new Set(rs.map(r=>r.name))];
+    let best=null;
+    for(const n of names){ const a=agg(rs.filter(r=>r.name===n));
+      if(!best||a.prize>best.a.prize) best={n,a}; }
+    if(best) rows.push({y,n:best.n,a:best.a});
+  }
+  s+='<div class="card"><h2>年度別の最高獲得賞金</h2><div class="scroll"><table><thead><tr>'
+    +'<th class="num">年</th><th>馬名</th><th>成績</th><th class="num">獲得賞金</th></tr></thead><tbody>';
+  for(const r of rows)
+    s+='<tr><td class="num">'+r.y+'</td><td><b>'+hlink(r.n)+'</b></td>'
+      +'<td class="dim">'+r.a.n+'戦'+r.a.w+'勝　G1 '+(r.a.g1+r.a.jpn1)+'</td>'
+      +'<td class="num">'+num(r.a.prize)+'</td></tr>';
+  s+='</tbody></table></div></div>';
+
+  // 騎手・調教師
+  const pboard=(title,map,linkFn,keyLabel,runLabel)=>{
+    // 騎手は出走レコードの配列、調教師は管理馬の配列を持つ
+    const flat=v=>(v[0]&&'rank' in v[0])?v:v.flatMap(h=>h.runs||[]);
+    const list=[...map.entries()].map(([k,v])=>({k,a:agg(flat(v))}))
+      .sort((a,b)=>b.a.w-a.a.w||b.a.prize-a.a.prize).slice(0,10);
+    let t='<div class="card"><h2>'+title+'</h2><div class="scroll"><table><thead><tr>'
+      +'<th class="num">順</th><th>'+keyLabel+'</th><th class="num">'+runLabel+'</th><th class="num">1着</th>'
+      +'<th class="num">勝率</th><th class="num">G1</th><th class="num">獲得賞金</th></tr></thead><tbody>';
+    list.forEach((x,i)=>{ t+='<tr><td class="num">'+(i+1)+'</td><td><b>'+linkFn(x.k)+'</b></td>'
+      +'<td class="num">'+x.a.n+'</td><td class="num'+(i===0?' win':'')+'">'+x.a.w+'</td>'
+      +'<td class="num">'+rate(x.a)+'</td>'
+      +'<td class="num">'+((x.a.g1+x.a.jpn1)||'')+'</td><td class="num">'+num(x.a.prize)+'</td></tr>'; });
+    return t+'</tbody></table></div></div>';
+  };
+  s+=pboard('騎手 通算勝利数',DB.jockeys,jlink,'騎手','騎乗');
+  s+=pboard('調教師 通算勝利数',DB.trainers,tlink,'調教師','出走');
+  return s;
+}
+
 /* ============ ルーター ============ */
 function render(){
   if(!DB) return;
@@ -1261,6 +1595,10 @@ function render(){
   else if(hash.startsWith('#/jockey/')){ app.innerHTML=viewJockey(decodeURIComponent(hash.slice(9))); route='jockeys'; }
   else if(hash.startsWith('#/jockeys')){ app.innerHTML=viewJockeys(); bindPeople('jockeys'); route='jockeys'; }
   else if(hash.startsWith('#/trainer/')){ app.innerHTML=viewTrainer(decodeURIComponent(hash.slice(10))); route='trainers'; }
+  else if(hash.startsWith('#/venue/')){ app.innerHTML=viewVenue(decodeURIComponent(hash.slice(8))); route='courses'; }
+  else if(hash.startsWith('#/race/')){ app.innerHTML=viewRace(decodeURIComponent(hash.slice(7))); route='courses'; }
+  else if(hash.startsWith('#/courses')){ app.innerHTML=viewCourses(); bindCourses(); route='courses'; }
+  else if(hash.startsWith('#/records')){ app.innerHTML=viewRecords(); route='records'; }
   else if(hash.startsWith('#/trainers')){ app.innerHTML=viewTrainers(); bindPeople('trainers'); route='trainers'; }
   else { app.innerHTML=viewAwards(); }
   document.querySelectorAll('nav a').forEach(a=>a.classList.toggle('on',a.dataset.r===route));
