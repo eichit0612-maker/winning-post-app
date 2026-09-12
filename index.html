@@ -2279,11 +2279,12 @@ function inHorse(){
   let s='<div class="card"><h2>新しい馬を登録する</h2><div class="inrow">'
     +fld('h_name','馬名','type="text" value="'+esc(h.name)+'"')
     +fld('h_birth','生年','type="number" inputmode="numeric" value="'+esc(h.birth)+'"')
-    +'</div><div class="inrow">'
-    +fld('h_trainer','調教師','type="text" list="trainer-list" value="'+esc(h.trainer)+'"')
+    // 並びはゲーム側の画面に合わせる: 馬名 → 生年 → 毛色 → 調教師・所属 → 血統
     +'</div><div class="inrow">'
     +fld('h_color','毛色','',colors.map(c=>opt(c,h.color)).join(''))
     +fld('h_sex','性別','',IN_SEXES.map(x=>opt(x,h.sex)).join(''))
+    +'</div><div class="inrow">'
+    +fld('h_trainer','調教師','type="text" list="trainer-list" value="'+esc(h.trainer)+'"')
     +fld('h_base','所属','',bases.map(b=>opt(b,h.base)).join(''))
     +'</div><div class="inrow">'
     +fld('h_sire','父 <span>入力すると候補が出ます</span>',
