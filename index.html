@@ -191,6 +191,35 @@ text.dlabel{fill:var(--ink);font-size:12.5px;font-weight:700}
   padding:7px 12px;border:1px solid var(--line);border-radius:10px;background:var(--panel);cursor:pointer}
 .chk input{accent-color:var(--accent);margin:0}
 
+/* ---- 入力 ---- */
+.inmsg{margin-top:12px;font-size:13px;font-weight:700;text-align:center;min-height:18px;white-space:pre-wrap}
+.inmsg.ok{color:var(--accent)}
+.inmsg.ng{color:var(--jp)}
+.inrow{display:flex;gap:8px;flex-wrap:wrap;align-items:flex-end;margin-bottom:10px}
+.inrow>.inf{flex:1;min-width:92px}
+.inf label{display:block;font-size:11.5px;color:var(--muted);font-weight:700;margin-bottom:3px}
+.inf label span{font-weight:400;opacity:.75}
+.inf input,.inf select{width:100%;padding:8px 10px;border:1px solid var(--line);border-radius:10px;
+  background:var(--panel);color:var(--ink);font-size:14px;font-family:inherit}
+.inf input:focus,.inf select:focus{outline:none;border-color:var(--accent);
+  box-shadow:0 0 0 3px var(--accent-soft)}
+.inbtn{font-family:inherit;font-size:14px;font-weight:700;padding:9px 18px;border-radius:10px;
+  border:1px solid var(--accent);background:var(--accent);color:var(--on-bright);cursor:pointer}
+.inbtn.sub{background:var(--panel);color:var(--muted);border-color:var(--line)}
+.inbtn:disabled{opacity:.45;cursor:default}
+.cartitem{display:flex;align-items:center;gap:10px;background:var(--panel2);border-radius:10px;
+  padding:9px 12px;margin-bottom:6px;font-size:13px}
+.cartitem .sub2{display:block;color:var(--muted);font-size:11.5px}
+.cartitem button{margin-left:auto;border:none;background:transparent;color:var(--jp);
+  font-weight:800;cursor:pointer;font-size:17px;padding:0 6px;line-height:1}
+.rcard{border:1px solid var(--line);border-radius:12px;padding:12px;margin-bottom:12px}
+.rcard .rh{font-weight:800;font-size:14.5px}
+.rcard .rs{color:var(--muted);font-size:11.5px;margin-bottom:10px}
+.hbox{border-top:1px dashed var(--line);padding-top:9px;margin-top:9px}
+.hbox .hn{font-weight:700;margin-bottom:6px}
+.hbox .hn em{font-style:normal;font-weight:400;color:var(--muted);font-size:11.5px}
+.pzhint{font-size:11.5px;color:var(--accent);font-weight:700;margin-top:4px;min-height:14px}
+
 /* ---- 名馬列伝 ---- */
 .leg-hd{display:flex;align-items:center;gap:14px}
 .leg-no{flex:0 0 44px;height:44px;border-radius:12px;background:var(--accent-soft);
@@ -327,6 +356,7 @@ svg.map{display:block;width:100%;height:auto;border-radius:12px;background:var(-
     <a href="#/courses" data-r="courses">レース</a>
     <a href="#/map" data-r="map">地図</a>
     <a href="#/records" data-r="records">記録</a>
+    <a href="#/input" data-r="input">入力</a>
   </nav>
   <div class="search">
     <input id="q" type="search" placeholder="馬名で検索…" autocomplete="off">
@@ -2066,6 +2096,322 @@ function recordsBody(region){
   return s;
 }
 
+/* ============ 画面: 入力 ============ */
+// スプレッドシートへの書き込みは GAS のウェブアプリ経由。
+// text/plain で送るとブラウザのプリフライトが起きないので、CORSを素通りできる。
+const API_URL='https://script.google.com/macros/s/AKfycbzsRqPCfgQvq0WLmwSSEfv8VtyKn_gVlBx0i_TauO5mf2cmQWDj4wbgikHslloCEHJYLQ/exec';
+const TOKEN_KEY='wp-api-token';
+const getToken=()=>{ try{ return localStorage.getItem(TOKEN_KEY)||''; }catch(e){ return ''; } };
+const setToken=t=>{ try{ localStorage.setItem(TOKEN_KEY,t); }catch(e){} };
+
+async function api(action,extra){
+  const res=await fetch(API_URL,{method:'POST',
+    headers:{'Content-Type':'text/plain;charset=utf-8'},
+    body:JSON.stringify(Object.assign({token:getToken(),action:action},extra||{}))});
+  if(!res.ok) throw new Error('通信に失敗しました（'+res.status+'）');
+  const j=await res.json();
+  if(!j.ok) throw new Error(j.error||'原因の分からないエラー');
+  return j;
+}
+
+// 画面を描き直しても入力が消えないよう、フォームの中身は状態として持つ
+const IN={tab:'entry',cart:[],pending:null,cands:[],init:null,busy:false,
+          meet:{year:'',month:'',week:''},
+          race:{place:'',raceName:'',raceNo:'',grade:'G1',dist:'',
+                trackType:'芝',trackCond:'良',winPrize:'',known:null},
+          horse:'',jockey:''};
+const IN_GRADES=['G1','G2','G3','JPNⅠ','JPNⅡ','JPNⅢ','L','OP',
+                 '3勝クラス','2勝クラス','1勝クラス','未勝利','新馬'];
+const TIME_RE=/^(\d+\.\d{2}\.\d|\d{1,2}\.\d)$/;
+const inMsg=(t,ok)=>{ const e=document.getElementById('inmsg');
+  if(e){ e.textContent=t||''; e.className='inmsg'+(t?(ok?' ok':' ng'):''); } };
+const fld=(id,label,attrs,opts)=>'<div class="inf"><label for="'+id+'">'+label+'</label>'
+  +(opts ? '<select id="'+id+'">'+opts+'</select>'
+         : '<input id="'+id+'" '+(attrs||'')+'></div>').replace(/<\/div>$/,'')+'</div>';
+const opt=(v,cur,label)=>'<option value="'+esc(v)+'"'+(String(cur)===String(v)?' selected':'')+'>'
+  +esc(label===undefined?v:label)+'</option>';
+
+function viewInput(){
+  let s='<h1>入力</h1><div class="sub">出走登録と結果入力をここから行えます。'
+    +'スプレッドシートを開かなくても、スマホからでも使えます。</div>';
+  if(!getToken()){
+    return s+'<div class="card"><h2>最初の設定</h2>'
+      +'<div class="note" style="margin-bottom:14px">スプレッドシートのメニュー '
+      +'<b>WPツール → Webアプリの合言葉を作り直す</b> で作った合言葉を、一度だけ貼り付けてください。'
+      +'この端末に保存されるので、次回からは不要です。</div>'
+      +'<div class="inrow"><div class="inf" style="flex:3">'
+      +'<label for="tokIn">合言葉</label><input id="tokIn" type="password" autocomplete="off"></div>'
+      +'<div class="inf" style="flex:0 0 auto"><button class="inbtn" id="tokSave">保存して接続を確認</button></div>'
+      +'</div><div id="inmsg" class="inmsg"></div></div>';
+  }
+  return s+'<div class="tabs">'
+    +'<button class="tabbtn'+(IN.tab==='entry'?' on':'')+'" data-it="entry">① 出走登録</button>'
+    +'<button class="tabbtn'+(IN.tab==='result'?' on':'')+'" data-it="result">② 結果入力</button>'
+    +'</div><div id="inbody"><div class="card"><div class="mapempty">読み込んでいます…</div></div></div>'
+    +'<div id="inmsg" class="inmsg"></div>'
+    +'<div class="note">合言葉を入れ直したいときは'
+    +'<a class="link" href="#" id="tokReset">こちら</a>。</div>';
+}
+
+/* ---- ① 出走登録 ---- */
+function inEntry(){
+  const m=IN.meet, r=IN.race, horses=(IN.init&&IN.init.horses)||[];
+  let s='<div class="card"><h2>1. 開催</h2><div class="inrow">'
+    +fld('e_year','年','type="number" inputmode="numeric" value="'+esc(m.year)+'"')
+    +fld('e_month','月','type="number" inputmode="numeric" value="'+esc(m.month)+'"')
+    +fld('e_week','週','type="number" inputmode="numeric" value="'+esc(m.week)+'"')
+    +'<div class="inf" style="flex:0 0 auto"><button class="inbtn" id="e_search">レースを探す</button></div>'
+    +'</div><div class="note">開催が変わるまで入れ直さなくて構いません。</div></div>';
+
+  s+='<div class="card"><h2>2. レース</h2><div class="inrow"><div class="inf">'
+    +'<label for="e_cand">候補から選ぶ</label><select id="e_cand"><option value="">'
+    +(IN.cands.length?'▼ 選んでください ▼':'まずは上の「レースを探す」')+'</option>'
+    +IN.cands.map((r,i)=>'<option value="'+i+'">'+esc(r.place+' '
+      +(r.raceNo?r.raceNo+'R ':'')+r.name+'（'+r.grade+'）')+'</option>').join('')
+    +'</select></div></div><div class="inrow">'
+    +fld('e_place','場所','type="text" list="place-list" value="'+esc(r.place)+'"')
+    +fld('e_race','レース名','type="text" value="'+esc(r.raceName)+'"')
+    +'</div><div class="inrow">'
+    +fld('e_grade','格','',IN_GRADES.map(g=>opt(g,r.grade)).join(''))
+    +fld('e_dist','距離','type="number" inputmode="numeric" value="'+esc(r.dist)+'"')
+    +fld('e_surf','馬場','',opt('芝',r.trackType)+opt('ダート',r.trackType))
+    +fld('e_cond','状態 <span>後で直せます</span>','',
+        ['良','稍重','重','不良'].map(c=>opt(c,r.trackCond)).join(''))
+    +'</div><div class="inrow">'
+    +fld('e_win','1着賞金 <span>マスタに保存されます</span>',
+        'type="number" inputmode="numeric" value="'+esc(r.winPrize)+'"')
+    +'</div><div class="note" id="e_winhint">'
+    +(r.known===null
+      ? 'ここに入れておくと、結果入力のときに着順から賞金が自動で決まります。'
+      : r.known
+        ? 'マスタに 1着賞金 <b>'+num(r.known)+'</b> が入っています。'
+        : '<span style="color:var(--jp)">このレースの1着賞金はまだマスタにありません。</span>'
+          +'ここに入れておくと、結果入力で賞金が自動になります。')
+    +'</div>'
+    +'<datalist id="place-list">'
+    +((IN.init&&IN.init.places)||[]).map(p=>'<option value="'+esc(p)+'">').join('')
+    +'</datalist></div>';
+
+  s+='<div class="card"><h2>3. 出走する馬</h2><div class="inrow">'
+    +fld('e_horse','馬','','<option value="">選んでください</option>'
+        +horses.map(h=>opt(h,IN.horse)).join(''))
+    +fld('e_jockey','騎手 <span>空欄なら前走から</span>','type="text" value="'+esc(IN.jockey)+'"')
+    +'<div class="inf" style="flex:0 0 auto"><button class="inbtn" id="e_add">追加</button></div>'
+    +'</div></div>';
+
+  s+='<div class="card"><h2>4. 登録待ち'+(IN.cart.length?'（'+IN.cart.length+'頭）':'')+'</h2>'
+    +(IN.cart.length
+      ? IN.cart.map((e,i)=>'<div class="cartitem"><div><b>'+esc(e.horseName)+'</b>'
+          +'<span class="sub2">'+esc(e.place+' '+e.raceName)+(e.jockey?' / '+esc(e.jockey):'')
+          +'</span></div><button data-del="'+i+'" title="取り消す">×</button></div>').join('')
+      : '<div class="mapempty">まだ追加されていません</div>')
+    +'<div class="inrow" style="margin-top:12px">'
+    +'<div class="inf"><button class="inbtn" id="e_submit"'+(IN.cart.length?'':' disabled')
+    +'>まとめて出走登録する</button></div>'
+    +'<div class="inf" style="flex:0 0 auto"><button class="inbtn sub" id="e_clear">空にする</button></div>'
+    +'</div><div class="note">人気・着順・タイム・賞金は空のまま行が作られます。'
+    +'プレイしたら「② 結果入力」で埋めてください。</div></div>';
+  return s;
+}
+
+/* ---- ② 結果入力 ---- */
+function inResult(){
+  const races=(IN.pending&&IN.pending.races)||[];
+  let s='<div class="card"><div class="inrow">'
+    +'<div class="inf"><button class="inbtn" id="r_load">仮登録中のレースを読み込む</button></div>'
+    +'</div><div class="note">「① 出走登録」で作った行を、レースごとに並べます。</div></div>';
+  if(!races.length) return s
+    +'<div class="card"><div class="mapempty">仮登録中の行がありません。</div></div>';
+
+  s+='<div class="card">';
+  races.forEach((R,ri)=>{
+    s+='<div class="rcard"><div class="rh">'+esc(R.raceName)+'</div>'
+      +'<div class="rs">'+esc(R.date+' '+shortPlace(R.place)+' / '+R.grade+' / '+R.surf+R.dist+'m')
+      +(R.winPrize?' / 1着 '+num(R.winPrize):' / <span style="color:var(--jp)">1着賞金なし</span>')+'</div>'
+      +'<div class="inrow">'+fld('c_'+ri,'馬場状態（このレース全体）','',
+          ['良','稍重','重','不良'].map(c=>opt(c,R.cond)).join(''))+'</div>';
+    R.horses.forEach((H,hi)=>{
+      const id=ri+'_'+hi;
+      s+='<div class="hbox"><div class="hn">'+esc(H.name)
+        +(H.jockey?' <em>'+esc(H.jockey)+'</em>':'')+'</div><div class="inrow">'
+        +fld('p_'+id,'人気','type="number" inputmode="numeric" value="'+esc(H.popularity)+'"')
+        +fld('k_'+id,'着順','type="number" inputmode="numeric" value="'+esc(H.rank)
+            +'" data-ri="'+ri+'" data-hi="'+hi+'"')
+        +'</div><div class="inrow">'
+        +fld('t_'+id,'タイム','type="text" placeholder="1.34.5" value="'+esc(H.time)+'"')
+        +'<div class="inf" id="wbox_'+id+'"><label for="w_'+id+'">勝ち馬</label>'
+        +'<input id="w_'+id+'" type="text" value="'+esc(H.winner)+'"></div>'
+        +'</div><div class="inrow">'
+        +fld('z_'+id,'賞金 <span>空欄で自動</span>','type="number" inputmode="numeric" value="'
+            +esc(H.prize)+'"')
+        +'</div><div class="pzhint" id="pz_'+id+'"></div></div>';
+    });
+    s+='</div>';
+  });
+  s+='<div class="inrow"><div class="inf">'
+    +'<button class="inbtn" id="r_save">結果を保存する</button></div></div>'
+    +'<div class="note">賞金を空欄にすると、1着賞金と着順から自動で計算します。</div></div>';
+
+  s+='<div class="card"><h2>本登録</h2>'
+    +'<div class="note" style="margin-bottom:12px">仮登録の内容を「登録済」シートへ移します。'
+    +'ここまで済ませると、サイトの各ページに反映されます。</div>'
+    +'<button class="inbtn sub" id="r_commit">本登録する</button></div>';
+  return s;
+}
+
+function inPrizePreview(ri,hi){
+  const R=IN.pending.races[ri], id=ri+'_'+hi;
+  const rank=Number(document.getElementById('k_'+id).value);
+  const wb=document.getElementById('wbox_'+id);
+  if(wb) wb.hidden=(rank===1);
+  const hint=document.getElementById('pz_'+id); if(!hint) return;
+  const z=document.getElementById('z_'+id).value.trim();
+  if(z||!rank||!R.winPrize){ hint.textContent=''; return; }
+  const rt=rateOf(R.grade,R.place);
+  const v=rank===1?R.winPrize:(rt[rank]===undefined?0:Math.round(R.winPrize*rt[rank]));
+  hint.textContent='空欄なら '+num(v)+' が入ります（'+rank+'着）';
+}
+
+function inRender(){
+  const b=document.getElementById('inbody'); if(!b) return;
+  b.innerHTML=IN.tab==='entry'?inEntry():inResult();
+  inBindBody();
+}
+
+function inBindBody(){
+  const $=id=>document.getElementById(id);
+  const on=(id,ev,fn)=>{ const e=$(id); if(e) e.addEventListener(ev,fn); };
+  const busy=(el,label,fn)=>{ if(IN.busy) return; IN.busy=true;
+    const old=el.textContent; el.textContent=label; el.disabled=true;
+    fn().catch(err=>inMsg('⚠️ '+err.message,false))
+        .then(()=>{ IN.busy=false; el.textContent=old; el.disabled=false; }); };
+
+  if(IN.tab==='entry'){
+    ['year','month','week'].forEach(k=>on('e_'+k,'input',e=>{ IN.meet[k]=e.target.value; }));
+    // 入力はそのつど状態へ。描き直しても消えないようにする
+    [['e_place','place'],['e_race','raceName'],['e_grade','grade'],['e_dist','dist'],
+     ['e_surf','trackType'],['e_cond','trackCond'],['e_win','winPrize']]
+      .forEach(([id,k])=>{ const el=$(id); if(el)
+        el.addEventListener(el.tagName==='SELECT'?'change':'input',ev=>{ IN.race[k]=ev.target.value; }); });
+    on('e_horse','change',ev=>{ IN.horse=ev.target.value; });
+    on('e_jockey','input',ev=>{ IN.jockey=ev.target.value; });
+    on('e_search','click',e=>{
+      const m=IN.meet;
+      if(!m.month||!m.week){ inMsg('⚠️ 月と週を入れてください',false); return; }
+      busy(e.target,'検索中…',()=>api('searchRaces',{month:m.month,week:m.week}).then(j=>{
+        IN.cands=j.data||[];
+        inMsg(IN.cands.length?IN.cands.length+'件見つかりました':'マスタに登録がありません。下の欄に手入力してください',
+          !!IN.cands.length);
+        inRender();
+      }));
+    });
+    on('e_cand','change',e=>{
+      const c=IN.cands[e.target.value]; if(!c) return;
+      IN.race={place:c.place||'', raceName:c.name||'', raceNo:c.raceNo||'',
+        grade:c.grade||'G1', dist:c.dist||'', trackType:c.type||'芝',
+        trackCond:IN.race.trackCond, winPrize:c.winPrize||'', known:c.winPrize||0};
+      inMsg('レース情報を読み込みました',true);
+      inRender();
+    });
+    on('e_add','click',()=>{
+      const r=IN.race, horse=IN.horse;
+      if(!horse){ inMsg('⚠️ 馬を選んでください',false); return; }
+      if(!r.place.trim()||!r.raceName.trim()){
+        inMsg('⚠️ 場所とレース名を入れてください',false); return; }
+      if(IN.cart.some(x=>x.horseName===horse&&x.raceName===r.raceName)){
+        inMsg('⚠️ その馬はこのレースで既に追加済みです',false); return; }
+      IN.cart.push({horseName:horse, jockey:IN.jockey.trim(),
+        place:r.place.trim(), raceName:r.raceName.trim(), raceNo:r.raceNo,
+        grade:r.grade, dist:r.dist, trackType:r.trackType,
+        trackCond:r.trackCond, winPrize:String(r.winPrize).trim()});
+      IN.horse=''; IN.jockey='';           // レース情報は残す。次の馬をすぐ足せる
+      inMsg(horse+' を追加しました',true);
+      inRender();
+    });
+    document.querySelectorAll('[data-del]').forEach(b=>b.onclick=()=>{
+      IN.cart.splice(+b.dataset.del,1); inMsg(''); inRender(); });
+    on('e_clear','click',()=>{ IN.cart=[]; inMsg('リストを空にしました',true); inRender(); });
+    on('e_submit','click',e=>{
+      const m=IN.meet;
+      if(!m.year||!m.month||!m.week){ inMsg('⚠️ 開催の年・月・週を入れてください',false); return; }
+      if(!IN.cart.length) return;
+      busy(e.target,'登録中…',()=>api('registerEntries',
+        {payload:{year:m.year,month:m.month,week:m.week,entries:IN.cart}}).then(j=>{
+          IN.cart=[]; IN.pending=null; inMsg(j.message,true); inRender(); }));
+    });
+  } else {
+    on('r_load','click',e=>busy(e.target,'読み込み中…',()=>api('getPending').then(j=>{
+      IN.pending=j.data; inMsg('',true); inRender(); })));
+    document.querySelectorAll('[id^="k_"],[id^="z_"]').forEach(el=>{
+      const k=el.id.slice(2).split('_');
+      el.addEventListener('input',()=>inPrizePreview(+k[0],+k[1])); });
+    ((IN.pending&&IN.pending.races)||[]).forEach((R,ri)=>
+      R.horses.forEach((H,hi)=>inPrizePreview(ri,hi)));
+    on('r_save','click',e=>{
+      const items=[]; let bad='';
+      IN.pending.races.forEach((R,ri)=>{
+        const cond=$('c_'+ri).value;
+        R.horses.forEach((H,hi)=>{
+          const id=ri+'_'+hi, t=$('t_'+id).value.trim();
+          if(t&&!TIME_RE.test(t)) bad=H.name+' のタイム「'+t+'」は 1.34.5 か 58.8 の形で入れてください';
+          items.push({row:H.row,name:H.name,cond:cond,
+            popularity:$('p_'+id).value.trim(), rank:$('k_'+id).value.trim(), time:t,
+            winner:(Number($('k_'+id).value)===1?'':$('w_'+id).value.trim()),
+            prize:$('z_'+id).value.trim()});
+        });
+      });
+      if(bad){ inMsg('⚠️ '+bad,false); return; }
+      busy(e.target,'保存中…',()=>api('saveResults',{items:items}).then(j=>{
+        inMsg(j.message,true);
+        return api('getPending').then(p=>{ IN.pending=p.data; inRender(); });
+      }));
+    });
+    on('r_commit','click',e=>{
+      if(!confirm('仮登録の内容を「登録済」シートへ移します。よろしいですか。')) return;
+      busy(e.target,'本登録中…',()=>api('commit').then(j=>{
+        IN.pending=null; inMsg(j.message+'\n最新のデータを読み直しています…',true);
+        return reloadData().then(()=>{ inMsg(j.message+'\nサイトに反映しました',true); inRender(); });
+      }));
+    });
+  }
+}
+
+function bindInput(){
+  const $=id=>document.getElementById(id);
+  if(!getToken()){
+    const save=$('tokSave'); if(!save) return;
+    save.onclick=()=>{
+      const t=$('tokIn').value.trim();
+      if(!t){ inMsg('⚠️ 合言葉を入れてください',false); return; }
+      setToken(t); inMsg('確認しています…',true);
+      api('ping').then(()=>{ inMsg('つながりました',true);
+          document.getElementById('app').innerHTML=viewInput(); bindInput(); })
+        .catch(err=>{ setToken(''); inMsg('⚠️ '+err.message,false); });
+    };
+    return;
+  }
+  document.querySelectorAll('[data-it]').forEach(b=>b.onclick=()=>{
+    IN.tab=b.dataset.it; inMsg('');
+    document.getElementById('app').innerHTML=viewInput(); bindInput();
+  });
+  const reset=$('tokReset');
+  if(reset) reset.onclick=ev=>{ ev.preventDefault(); setToken('');
+    document.getElementById('app').innerHTML=viewInput(); bindInput(); };
+
+  // 馬と競馬場の一覧は一度だけ取る。年は前回登録した値を初期値にする
+  const start=IN.init?Promise.resolve():api('init').then(j=>{
+    IN.init=j.data;
+    if(!IN.meet.year&&j.data&&j.data.lastYear) IN.meet.year=String(j.data.lastYear);
+  });
+  start.then(()=>{
+    if(IN.tab==='result'&&!IN.pending)
+      return api('getPending').then(j=>{ IN.pending=j.data; });
+  }).then(inRender)
+    .catch(err=>{ const b=$('inbody');
+      if(b) b.innerHTML='<div class="card"><div class="mapempty">つながりませんでした。<br>'
+        +esc(err.message)+'</div></div>'; });
+}
+
 /* ============ 画面: 名馬列伝 ============ */
 // 所有馬だけが対象。他厩舎の馬は勝ち鞍しか分からないので列伝は書けない。
 const LEG={sort:'score',region:''};
@@ -2458,6 +2804,7 @@ function render(){
   else if(hash.startsWith('#/venue/')){ app.innerHTML=viewVenue(decodeURIComponent(hash.slice(8))); route='courses'; }
   else if(hash.startsWith('#/race/')){ app.innerHTML=viewRace(decodeURIComponent(hash.slice(7))); route='courses'; }
   else if(hash.startsWith('#/courses')){ app.innerHTML=viewCourses(); bindCourses(); route='courses'; }
+  else if(hash.startsWith('#/input')){ app.innerHTML=viewInput(); bindInput(); route='input'; }
   else if(hash.startsWith('#/legends')){ app.innerHTML=viewLegends(); bindLegends(); route='legends'; }
   else if(hash.startsWith('#/map')){ app.innerHTML=viewMap(); bindMap(); route='map'; }
   else if(hash.startsWith('#/records')){ app.innerHTML=viewRecords(); bindRecords(); route='records'; }
@@ -2494,6 +2841,17 @@ tb.onclick=()=>setTheme(document.documentElement.dataset.theme==='dark'?'light':
 
 /* ============ 起動 ============ */
 const stat=document.getElementById('status');
+// 書き込みのあとにシートを読み直す。入力ページの本登録から呼ぶ
+function reloadData(){
+  return fetchAll().then(raw=>{
+    const t=JSON.stringify(raw);
+    try{ localStorage.setItem(CACHE_KEY,t); }catch(e){}
+    DB=build(raw);
+    stat.title='';
+    stat.textContent='最新（'+new Date().toLocaleTimeString('ja-JP',
+      {hour:'2-digit',minute:'2-digit'})+'時点）';
+  });
+}
 (function boot(){
   // セーブ切り替えを試した名残のキャッシュを掃除する
   try{ ['wp-cache-v1','wp-cache-v2:wp11','wp-cache-v2:wp10','wp-save'].forEach(k=>localStorage.removeItem(k)); }catch(e){}
