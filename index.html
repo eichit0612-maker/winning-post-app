@@ -312,7 +312,8 @@ const PT_G1 = 20000, PT_JPN1 = 10000;      // 複合スコアの加点（1着）
 const PT_2ND = 10000, PT_3RD = 4000;       // G1での2着・3着の加点（JpnⅠは半分）
 const PT_UNDEFEATED = 20000;               // 無敗での三冠達成への上乗せ
 const OVERSEAS_MIN_G1 = 2, OVERSEAS_MIN_PRIZE = 10000;
-const SPRINT_MAX = 1400;                   // 短距離部門の上限（日本ならスプリンターズS・高松宮記念）
+const SPRINT_MAX = 1400;                   // スプリンター部門の上限（日本ならスプリンターズS・高松宮記念）
+const MILE_MAX   = 1600;                   // マイラー部門の上限（下限はSPRINT_MAX+1）
 const ALIAS = { 'ホーメンテスコ':'ホースメンテスコ', '二ホンピロムーテー':'ニホンピロムーテー' };
 const REGION_OF = { '栗東':'日本','美浦':'日本','アメリカ':'アメリカ',
                     'イギリス':'欧州','フランス':'欧州','アイルランド':'欧州' };
@@ -725,11 +726,17 @@ function computeAwards(horses,runs,years,rivals,crowns){
         if(b) note(b,y,region,label);
       }
 
-      // 短距離 — 1400m以下のG1勝ちが必須（日本ならスプリンターズS・高松宮記念）
+      // スプリンター — 1400m以下のG1勝ちが必須（日本ならスプリンターズS・高松宮記念）
       const spf=r=>r.dist&&r.dist<=SPRINT_MAX;
       const sp=pick(mine(spf).filter(e=>hasG1(e.a)));
-      list.push({cat:'最優秀短距離馬',win:sp});
-      if(sp) note(sp,y,region,'最優秀短距離馬');
+      list.push({cat:'最優秀スプリンター',win:sp});
+      if(sp) note(sp,y,region,'最優秀スプリンター');
+
+      // マイラー — 1401〜1600mのG1勝ちが必須（日本ならマイルCS・安田記念）
+      const mif=r=>r.dist&&r.dist>SPRINT_MAX&&r.dist<=MILE_MAX;
+      const mi=pick(mine(mif).filter(e=>hasG1(e.a)));
+      list.push({cat:'最優秀マイラー',win:mi});
+      if(mi) note(mi,y,region,'最優秀マイラー');
 
       // ダート
       if(HAS_DIRT[region]){
@@ -794,7 +801,8 @@ function viewAwards(){
     +'</ul><h4>各部門の条件</h4><ul>'
     +'<li><b>最優秀馬</b> … G1（またはJpnⅠ）を1勝以上</li>'
     +'<li><b>世代別（2歳・3歳・4歳上／牡牝）</b> … G1（またはJpnⅠ）勝ちが必須</li>'
-    +'<li><b>最優秀短距離馬</b> … '+SPRINT_MAX+'m以下のG1勝ち馬から選定</li>'
+    +'<li><b>最優秀スプリンター</b> … '+SPRINT_MAX+'m以下のG1勝ち馬から選定</li>'
+    +'<li><b>最優秀マイラー</b> … '+(SPRINT_MAX+1)+'〜'+MILE_MAX+'mのG1勝ち馬から選定</li>'
     +'<li><b>最優秀ダートホース</b> … 日本とアメリカのみ。G1勝ちが必須で、'
     +'この部門ではJpnⅠ勝ちもG1勝ちとして数えます</li>'
     +'<li><b>海外部門</b> … G1 '+OVERSEAS_MIN_G1+'勝以上、またはG1 1勝かつ年間賞金'+num(OVERSEAS_MIN_PRIZE)+'以上</li>'
