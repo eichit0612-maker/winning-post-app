@@ -314,6 +314,11 @@ const PT_UNDEFEATED = 20000;               // 無敗での三冠達成への上�
 const OVERSEAS_MIN_G1 = 2, OVERSEAS_MIN_PRIZE = 10000;
 const SPRINT_MAX = 1400;                   // スプリンター部門の上限（日本ならスプリンターズS・高松宮記念）
 const MILE_MAX   = 1600;                   // マイラー部門の上限（下限はSPRINT_MAX+1）
+// スプリンター・マイラー部門を設ける地域。国外はマイル路線を使わない年が多いので国内のみ
+const HAS_SPRINT_MILE = { '日本':true, 'アメリカ':false, '欧州':false };
+// 2歳・3歳限定のG1。この部門は古馬混合の芝G1を勝ったかで判定するため、受賞条件から外す
+const AGE_LIMITED = new Set(['阪神ジュベナイルフィリーズ','朝日杯フューチュリティステークス',
+                             '桜花賞','NHKマイルカップ']);
 const ALIAS = { 'ホーメンテスコ':'ホースメンテスコ', '二ホンピロムーテー':'ニホンピロムーテー' };
 const REGION_OF = { '栗東':'日本','美浦':'日本','アメリカ':'アメリカ',
                     'イギリス':'欧州','フランス':'欧州','アイルランド':'欧州' };
@@ -726,17 +731,18 @@ function computeAwards(horses,runs,years,rivals,crowns){
         if(b) note(b,y,region,label);
       }
 
-      // スプリンター — 1400m以下のG1勝ちが必須（日本ならスプリンターズS・高松宮記念）
-      const spf=r=>r.dist&&r.dist<=SPRINT_MAX;
-      const sp=pick(mine(spf).filter(e=>hasG1(e.a)));
-      list.push({cat:'最優秀スプリンター',win:sp});
-      if(sp) note(sp,y,region,'最優秀スプリンター');
-
-      // マイラー — 1401〜1600mのG1勝ちが必須（日本ならマイルCS・安田記念）
-      const mif=r=>r.dist&&r.dist>SPRINT_MAX&&r.dist<=MILE_MAX;
-      const mi=pick(mine(mif).filter(e=>hasG1(e.a)));
-      list.push({cat:'最優秀マイラー',win:mi});
-      if(mi) note(mi,y,region,'最優秀マイラー');
+      // スプリンター・マイラー — 国内のみ。3歳以上で、古馬混合の芝G1を勝っていることが条件。
+      // 集計も芝の該当距離帯に絞る（スプリンターズS・高松宮記念／安田記念・マイルCS・ヴィクトリアマイル）
+      if(HAS_SPRINT_MILE[region])
+        for(const [label,lo,hi] of [['最優秀スプリンター',0,SPRINT_MAX],
+                                    ['最優秀マイラー',SPRINT_MAX,MILE_MAX]]){
+          const f=r=>r.surface==='芝'&&r.dist>lo&&r.dist<=hi;
+          const b=pick(mine(f).filter(e=>
+            e.h.birth && y-+e.h.birth>=3 &&
+            e.a.wins.some(w=>!AGE_LIMITED.has(w.race))));
+          list.push({cat:label,win:b});
+          if(b) note(b,y,region,label);
+        }
 
       // ダート
       if(HAS_DIRT[region]){
@@ -801,8 +807,11 @@ function viewAwards(){
     +'</ul><h4>各部門の条件</h4><ul>'
     +'<li><b>最優秀馬</b> … G1（またはJpnⅠ）を1勝以上</li>'
     +'<li><b>世代別（2歳・3歳・4歳上／牡牝）</b> … G1（またはJpnⅠ）勝ちが必須</li>'
-    +'<li><b>最優秀スプリンター</b> … '+SPRINT_MAX+'m以下のG1勝ち馬から選定</li>'
-    +'<li><b>最優秀マイラー</b> … '+(SPRINT_MAX+1)+'〜'+MILE_MAX+'mのG1勝ち馬から選定</li>'
+    +'<li><b>最優秀スプリンター</b>（国内のみ） … 3歳以上で、'+SPRINT_MAX+'m以下の'
+    +'古馬混合の芝G1を勝っていることが必須</li>'
+    +'<li><b>最優秀マイラー</b>（国内のみ） … 3歳以上で、'+(SPRINT_MAX+1)+'〜'+MILE_MAX+'mの'
+    +'古馬混合の芝G1を勝っていることが必須。2歳・3歳限定戦（阪神JF・朝日杯FS・桜花賞・NHKマイルC）'
+    +'は世代別部門で扱うため対象外</li>'
     +'<li><b>最優秀ダートホース</b> … 日本とアメリカのみ。G1勝ちが必須で、'
     +'この部門ではJpnⅠ勝ちもG1勝ちとして数えます</li>'
     +'<li><b>海外部門</b> … G1 '+OVERSEAS_MIN_G1+'勝以上、またはG1 1勝かつ年間賞金'+num(OVERSEAS_MIN_PRIZE)+'以上</li>'
