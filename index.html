@@ -2066,22 +2066,19 @@ const LEG={sort:'score',region:''};
 const MONTH=d=>+String(d).slice(5,7);
 const careerPts=a=>a.prize+a.g1*PT_G1+a.jpn1*PT_JPN1;
 
-// 列伝に載せる馬を選ぶ。称号・年度表彰・G1の勝ち数のどれかを満たせば載る
+// 列伝に載せる馬を選ぶ。G1・JpnⅠを3勝以上していることが条件
+const LEGEND_MIN_G1=3;
 function legendList(){
   const out=[];
   for(const h of DB.horses.values()){
     const runs=h.runs||[]; if(!runs.length) continue;
     const a=h.total||agg(runs);
-    const crowns=DB.crowns.byHorse.get(h.name)||[];
-    const awards=DB.awards.byHorse.get(h.name)||[];
-    const best=awards.filter(x=>x.cat==='最優秀馬');
     const g1=a.g1+a.jpn1;
-    const why=[];
-    if(crowns.some(c=>c.c.pt>0)) why.push('crown');
-    if(best.length) why.push('champ');
-    if(g1>=3) why.push('g1');
-    if(!why.length) continue;
-    out.push({h,a,runs,crowns,awards,best,g1,score:careerPts(a),why});
+    if(g1<LEGEND_MIN_G1) continue;
+    const awards=DB.awards.byHorse.get(h.name)||[];
+    out.push({h,a,runs,g1,score:careerPts(a),
+      crowns:DB.crowns.byHorse.get(h.name)||[],
+      awards, best:awards.filter(x=>x.cat==='最優秀馬')});
   }
   out.sort((x,y)=>y.score-x.score);
   return out;
@@ -2169,8 +2166,8 @@ function viewLegends(){
   else if(LEG.sort==='g1') list.sort((x,y)=>y.g1-x.g1||y.score-x.score);
   else list.sort((x,y)=>y.score-x.score);
 
-  let s='<h1>名馬列伝</h1><div class="sub">称号を得た馬、年度を代表した馬、'
-    +'G1を3勝以上した馬を選び、記録から経歴を組み立てています。</div>'
+  let s='<h1>名馬列伝</h1><div class="sub">G1・JpnⅠを'+LEGEND_MIN_G1+'勝以上した馬について、'
+    +'記録から経歴を組み立てています。</div>'
     +'<div class="filters">'
     +'<select id="lgsort">'+[['score','通算スコア順'],['g1','G1勝ち数順'],['year','生年順']]
       .map(([v,l])=>'<option value="'+v+'"'+(LEG.sort===v?' selected':'')+'>'+l+'</option>').join('')
