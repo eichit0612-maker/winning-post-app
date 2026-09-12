@@ -41,7 +41,7 @@ a.link:hover{opacity:.7}
 header{position:sticky;top:0;z-index:20;background:var(--panel);box-shadow:0 1px 12px rgba(16,60,40,.06)}
 header::after{content:"";display:block;height:3px;
   background:linear-gradient(90deg,var(--jp),var(--gold),var(--accent),var(--us),var(--eu))}
-.hd{max-width:1080px;margin:0 auto;padding:11px 16px;display:flex;gap:14px;align-items:center;flex-wrap:wrap}
+.hd{max-width:1400px;margin:0 auto;padding:11px 16px;display:flex;gap:14px;align-items:center;flex-wrap:wrap}
 .brand{font-weight:700;font-size:16px;letter-spacing:.04em;white-space:nowrap;color:var(--accent)}
 nav{display:flex;gap:4px;flex-wrap:wrap}
 nav a{padding:5px 13px;border-radius:999px;font-size:14px;color:var(--muted);transition:.12s}
@@ -62,7 +62,7 @@ nav a.on{background:var(--accent);color:var(--on-bright);font-weight:600}
   width:32px;height:32px;border-radius:50%;cursor:pointer;font-size:15px;line-height:1;padding:0}
 .theme-btn:hover{border-color:var(--accent);color:var(--accent)}
 
-main{max-width:1080px;margin:0 auto;padding:24px 16px 80px}
+main{max-width:1400px;margin:0 auto;padding:24px 16px 80px}
 h1{font-size:25px;margin:0 0 5px;letter-spacing:.03em}
 .sub{color:var(--muted);font-size:13px;margin-bottom:24px}
 
@@ -194,9 +194,6 @@ text.dlabel{fill:var(--ink);font-size:12.5px;font-weight:700}
 svg.map{display:block;width:100%;height:auto;border-radius:12px;background:var(--sea)}
 .map .land{fill:var(--land);stroke:var(--landline);stroke-width:.6;stroke-linejoin:round}
 .map .pin{fill:var(--muted);opacity:.7}
-.map .shade{fill:#000;opacity:.32;pointer-events:none}
-.map .gloss{fill:#fff;opacity:.24;pointer-events:none}
-.map .edge{fill:none;stroke:#000;stroke-width:.5;opacity:.25;pointer-events:none}
 .map .lead{stroke:var(--muted);stroke-width:.9;opacity:.45}
 .map .bar{cursor:pointer}
 .map .bar:hover .seg{filter:brightness(1.18)}
@@ -2063,12 +2060,14 @@ const MAP_SPLITS={
 const MAP_COLOR=['var(--s3)','var(--s2)','var(--s1)'];
 const mapFmt=(met,v)=>num(Math.round(v))+met.unit;
 
+// map-data.js を作り直したら必ず上げること。ブラウザが古い下絵を握り続けるのを防ぐ
+const MAP_DATA_VER='3';
 let mapsPromise=null;
 function loadMaps(){
   if(window.WP_MAPS) return Promise.resolve(window.WP_MAPS);
   if(!mapsPromise) mapsPromise=new Promise((ok,ng)=>{
     const s=document.createElement('script');
-    s.src='map-data.js';
+    s.src='map-data.js?v='+MAP_DATA_VER;
     s.onload=()=>window.WP_MAPS?ok(window.WP_MAPS):ng(new Error('中身が空です'));
     s.onerror=()=>ng(new Error('map-data.js が見つかりません'));
     document.head.appendChild(s);
@@ -2119,9 +2118,12 @@ function mapData(){
   return {v,items,met,sp,missing};
 }
 
-// 4点を結ぶ面。立体の側面と天面に使う
-function quad(p){ const n1=v=>Math.round(v*10)/10;
-  return 'M'+p.map(q=>n1(q[0])+' '+n1(q[1])).join('L')+'Z'; }
+// 上だけ角を丸めた棒。下端は必ず基準線に付ける
+function segPath(x,yTop,w,h,r){
+  const rr=Math.max(0,Math.min(r,w/2,h)), n1=v=>Math.round(v*10)/10;
+  return 'M'+n1(x)+' '+n1(yTop+h)+'V'+n1(yTop+rr)+'q0 '+n1(-rr)+' '+n1(rr)+' '+n1(-rr)
+    +'h'+n1(w-2*rr)+'q'+n1(rr)+' 0 '+n1(rr)+' '+n1(rr)+'V'+n1(yTop+h)+'Z';
+}
 
 function mapSvg(d){
   const {v,items,met,sp}=d, n1=x=>Math.round(x*10)/10;
@@ -2130,7 +2132,6 @@ function mapSvg(d){
   const BW=Math.max(7,Math.round(v.w/(wide?95:78))), MAXH=v.h*0.30, GAP=1.6;
   const top=Math.max(...items.map(i=>i.total));
   for(const it of items) it.h=Math.max(3,it.total/top*MAXH);
-  const DX=BW*0.42, DY=-BW*0.30;
 
   // 近すぎる棒は横にずらし、本来の位置へは引き出し線でつなぐ
   const gap=BW*(wide?0.62:1.45);
@@ -2147,37 +2148,27 @@ function mapSvg(d){
     if(!moved) break;
   }
   // 画面からはみ出させない。柱は奥行きのぶん右上へ伸びる
-  const loX=BW/2+2, hiX=v.w-BW/2-DX-2;
+  const loX=BW/2+2, hiX=v.w-BW/2-2;
   for(const it of items) it.bx=Math.max(loX,Math.min(hiX,it.bx));
 
-  // 奥（地図の上）から手前へ描くと、手前の柱が奥の柱にきちんと重なる
+  // 奥（地図の上）から手前の順に描くと、重なったときに手前が上になる
   let bars='';
   for(const it of [...items].sort((a,b)=>a.y-b.y)){
-    const x=it.bx-BW/2, yb=it.y;
+    const x=it.bx-BW/2;
     let last=it.segs.reduce((m,val,i)=>val>0?i:m,-1);
-    const segsIn = last<0 ? [it.total] : it.segs;   // 内訳が取れないときは1本の柱にする
+    const segsIn = last<0 ? [it.total] : it.segs;   // 内訳が取れないときは1本の棒にする
     if(last<0) last=0;
-    let cy=yb, faces='', yTopFace=yb;
+    let cy=it.y, segs='';
     for(let i=0;i<segsIn.length;i++){
       const val=segsIn[i]; if(!(val>0)) continue;
       const sh=val/it.total*it.h, yTop=cy-sh;
-      const pad=i===last?0:Math.min(GAP,sh*0.4), hh=Math.max(1,sh-pad), yy=yTop+pad;
-      const c=MAP_COLOR[i];
-      faces+='<rect x="'+n1(x)+'" y="'+n1(yy)+'" width="'+BW+'" height="'+n1(hh)+'" fill="'+c+'"/>'
-        +'<path d="'+quad([[x+BW,yy],[x+BW+DX,yy+DY],[x+BW+DX,yy+hh+DY],[x+BW,yy+hh]])+'" fill="'+c+'"/>';
-      if(i===last) yTopFace=yy;
+      const pad=i===last?0:Math.min(GAP,sh*0.4), hh=Math.max(1,sh-pad);
+      segs+= i===last
+        ? '<path class="seg" d="'+segPath(x,yTop,BW,hh,3)+'" fill="'+MAP_COLOR[i]+'"/>'
+        : '<rect class="seg" x="'+n1(x)+'" y="'+n1(yTop+pad)+'" width="'+BW+'" height="'+n1(hh)+'"'
+          +' fill="'+MAP_COLOR[i]+'"/>';
       cy=yTop;
     }
-    // 側面をまとめて暗く、天面を明るくして立体に見せる
-    faces+='<path class="shade" d="'+quad([[x+BW,yTopFace],[x+BW+DX,yTopFace+DY],
-            [x+BW+DX,yb+DY],[x+BW,yb]])+'"/>'
-      +'<path d="'+quad([[x,yTopFace],[x+DX,yTopFace+DY],[x+BW+DX,yTopFace+DY],[x+BW,yTopFace]])
-      +'" fill="'+MAP_COLOR[last]+'"/>'
-      +'<path class="gloss" d="'+quad([[x,yTopFace],[x+DX,yTopFace+DY],
-            [x+BW+DX,yTopFace+DY],[x+BW,yTopFace]])+'"/>'
-      +'<path class="edge" d="'+quad([[x,yTopFace],[x+DX,yTopFace+DY],
-            [x+BW+DX,yTopFace+DY],[x+BW,yTopFace]])+'"/>';
-
     const breakdown=sp.keys.map((k,i)=>k+' '+mapFmt(met,it.segs[i])).join(' ／ ');
     const sum=it.a.n+'走 '+it.a.w+'勝 勝率'+rate(it.a)+' ／ '+met.label+' '+mapFmt(met,it.total);
     bars+='<a class="bar" href="#/venue/'+encodeURIComponent(it.place)+'"'
@@ -2185,9 +2176,9 @@ function mapSvg(d){
       +' data-sum="'+esc(sum)+'" data-bd="'+esc(breakdown)+'">'
       +(Math.abs(it.bx-it.x)>1.5
         ? '<line class="lead" x1="'+n1(it.x)+'" y1="'+n1(it.y)+'" x2="'+n1(it.bx)+'" y2="'+n1(it.y)+'"/>' : '')
-      +'<circle class="pin" cx="'+n1(it.x)+'" cy="'+n1(it.y)+'" r="2.1"/>'+faces
-      +'<rect class="halo" x="'+n1(x-1.6)+'" y="'+n1(yTopFace+DY-1.6)+'" width="'+n1(BW+DX+3.2)
-      +'" height="'+n1(yb-yTopFace-DY+3.2)+'" rx="4"/>'
+      +'<circle class="pin" cx="'+n1(it.x)+'" cy="'+n1(it.y)+'" r="2.1"/>'+segs
+      +'<rect class="halo" x="'+n1(x-1.6)+'" y="'+n1(it.y-it.h-1.6)+'" width="'+n1(BW+3.2)
+      +'" height="'+n1(it.h+3.2)+'" rx="4"/>'
       +'<title>'+esc(shortPlace(it.place))+' — '+esc(sum)+'</title></a>';
   }
 
@@ -2197,12 +2188,11 @@ function mapSvg(d){
   for(const it of [...items].sort((a,b)=>b.total-a.total)){
     if(placed.length>=14) break;
     const name=shortPlace(it.place);
-    const cx=it.bx+DX/2, ty=it.y-it.h+DY;           // 天面の中心の真上に置く
-    const bw=name.length*fs*1.02, bx=cx-bw/2, by=ty-fs*1.35;
+    const bw=name.length*fs*1.02, bx=it.bx-bw/2, by=it.y-it.h-fs*1.35;
     if(by<2) continue;
     if(placed.some(p=>bx<p.x+p.w+2&&p.x<bx+bw+2&&by<p.y+p.h+2&&p.y<by+fs*1.2+2)) continue;
     placed.push({x:bx,y:by,w:bw,h:fs*1.2});
-    labels+='<text class="blabel" x="'+n1(cx)+'" y="'+n1(ty-fs*0.45)+'" font-size="'+fs+'">'
+    labels+='<text class="blabel" x="'+n1(it.bx)+'" y="'+n1(it.y-it.h-fs*0.45)+'" font-size="'+fs+'">'
       +esc(name)+'</text>';
   }
 
