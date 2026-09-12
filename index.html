@@ -371,6 +371,10 @@ const REGIONS = ['日本','アメリカ','欧州'];
 const HAS_DIRT = { '日本':true, 'アメリカ':true, '欧州':false };
 // 着順別の賞金率（1着賞金に対する割合）。地方交流(JpnⅠ〜Ⅲ)は別レート
 const RATE = { n:{2:.40,3:.25,4:.15,5:.10}, j:{2:.35,3:.20,4:.10,5:.05} };
+// 地方競馬場。格がG1でも地方交流なので j のレートを使う（例: 東京大賞典は格G1だが大井）
+const LOCAL_TRACK = /^(大井|川崎|船橋|浦和|門別|盛岡|水沢|金沢|名古屋|笠松|園田|姫路|高知|佐賀)/;
+const rateOf = (grade,place) =>
+  (/^JPN/.test(G(grade)) || LOCAL_TRACK.test(String(place||'').trim())) ? RATE.j : RATE.n;
 const JP_TRACKS = /^(中山|東京|京都|阪神|中京|新潟|福島|小倉|函館|札幌|大井|川崎|船橋|浦和|門別|盛岡|名古屋|園田|金沢|佐賀)/;
 const US_TRACKS = /^(アケダクト|ウッドバイン|オークローンパーク|ガルフストリームパーク|キーンランド|サラトガ|サンタアニタ|チャーチルダウンズ|デルマー|ピムリコ|フェアグラウンズ|ベルモントパーク|モンマスパーク|ロスアラミトス)/;
 const venueRegion = p => JP_TRACKS.test(p) ? '日本' : US_TRACKS.test(p) ? 'アメリカ' : '欧州';
@@ -581,9 +585,9 @@ function build(raw){
       const m=/[(（]([^)）]+)[)）]\s*$/.exec(R.mine[0].time||'');
       R.winner=m?m[1].trim():null; R.owned=false;
       if(R.winner){
-        const isJ=/^JPN/.test(G(R.grade));
+        const rt=rateOf(R.grade,R.place);
         for(const x of R.mine)
-          if(x.rank>=2&&x.rank<=5&&x.prize){ R.winPrize=Math.round(x.prize/RATE[isJ?'j':'n'][x.rank]); break; }
+          if(x.rank>=2&&x.rank<=5&&x.prize){ R.winPrize=Math.round(x.prize/rt[x.rank]); break; }
       }
     }
     for(const x of R.mine) x.winner=R.winner;
