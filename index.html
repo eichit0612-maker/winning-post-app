@@ -13,6 +13,7 @@
   --gold:#c08a08; --gold-ink:#8a6205; --gold-soft:#fff2ce;
   --jp:#d43f38; --us:#2166cf; --eu:#7a4bc6;
   --s1:#2a78d6; --s2:#eb6834; --s3:#1baf7a;
+  --sea:#e2ecf2; --land:#f6f3ec; --landline:#cfc8b9;
   --on-bright:#fff;
   --shadow:0 1px 2px rgba(16,60,40,.05),0 10px 28px rgba(16,60,40,.07);
 }
@@ -23,6 +24,7 @@
   --gold:#e9c05a; --gold-ink:#f0cd75; --gold-soft:#33290f;
   --jp:#f9756c; --us:#6fa8f7; --eu:#b489f5;
   --s1:#3987e5; --s2:#d95926; --s3:#199e70;
+  --sea:#141d1a; --land:#252e29; --landline:#3c4841;
   --on-bright:#101713;
   --shadow:0 1px 2px rgba(0,0,0,.45),0 10px 28px rgba(0,0,0,.4);
 }
@@ -185,6 +187,30 @@ text.dlabel{fill:var(--ink);font-size:12.5px;font-weight:700}
   padding:7px 12px;border:1px solid var(--line);border-radius:10px;background:var(--panel);cursor:pointer}
 .chk input{accent-color:var(--accent);margin:0}
 
+/* ---- 地図 ---- */
+.maplay{display:grid;gap:16px;grid-template-columns:minmax(0,1fr)}
+@media(min-width:1000px){ .maplay.side{grid-template-columns:minmax(0,1.15fr) minmax(300px,.85fr)} }
+.mapfig{position:relative}
+svg.map{display:block;width:100%;height:auto;border-radius:12px;background:var(--sea)}
+.map .land{fill:var(--land);stroke:var(--landline);stroke-width:.6;stroke-linejoin:round}
+.map .pin{fill:var(--muted);opacity:.7}
+.map .lead{stroke:var(--muted);stroke-width:.9;opacity:.45}
+.map .bar{cursor:pointer}
+.map .bar:hover .seg{filter:brightness(1.18)}
+.map .halo{fill:none;stroke:var(--ink);stroke-width:1.6;opacity:0}
+.map .bar:hover .halo{opacity:.75}
+.map .blabel{text-anchor:middle;font-weight:700;fill:var(--ink);
+  paint-order:stroke;stroke:var(--sea);stroke-width:3.2px;stroke-linejoin:round}
+.mapinfo{position:absolute;left:12px;top:12px;background:var(--panel);border:1px solid var(--line);
+  border-radius:12px;padding:10px 14px;box-shadow:var(--shadow);font-size:12.5px;
+  max-width:60%;pointer-events:none}
+.mapinfo b{font-size:14px;display:block;margin-bottom:2px}
+.mapinfo span{color:var(--muted);font-variant-numeric:tabular-nums}
+.maplegend{display:flex;flex-wrap:wrap;gap:6px 16px;margin-top:12px;font-size:12.5px;color:var(--muted)}
+.maplegend i{display:inline-block;width:11px;height:11px;border-radius:3px;margin-right:6px;
+  vertical-align:-1px}
+.mapempty{padding:40px 20px;text-align:center;color:var(--muted);font-size:13px}
+
 /* ---- 一覧 ---- */
 .filters{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:16px}
 .filters select,.filters input{padding:7px 12px;border:1px solid var(--line);border-radius:10px;
@@ -279,6 +305,7 @@ text.dlabel{fill:var(--ink);font-size:12.5px;font-weight:700}
     <a href="#/jockeys" data-r="jockeys">騎手</a>
     <a href="#/trainers" data-r="trainers">調教師</a>
     <a href="#/courses" data-r="courses">レース</a>
+    <a href="#/map" data-r="map">地図</a>
     <a href="#/records" data-r="records">記録</a>
   </nav>
   <div class="search">
@@ -1943,6 +1970,220 @@ function recordsBody(region){
   return s;
 }
 
+/* ============ 画面: 地図 ============ */
+// 下絵は自動生成の map-data.js。80KBほどあるので、地図を開いたときだけ読み込む。
+const MP={view:'jp',metric:'w',split:'surface'};
+const MAP_VIEWS=[['world','世界'],['jp','日本'],['us','アメリカ'],['eu','欧州']];
+const MAP_METRICS={
+  w:    {label:'勝利数',       of:a=>a.w,          unit:'勝'},
+  n:    {label:'出走数',       of:a=>a.n,          unit:'走'},
+  prize:{label:'獲得賞金',     of:a=>a.prize,      unit:''},
+  g1:   {label:'G1・JpnⅠ勝ち', of:a=>a.g1+a.jpn1,  unit:'勝'},
+};
+const MAP_SPLITS={
+  surface:{label:'内訳: 馬場別', keys:['芝','ダート'],
+           of:r=>r.surface==='芝'?'芝':r.surface==='ダート'?'ダート':null},
+  grade:  {label:'内訳: 格別',   keys:['G1・JpnⅠ','重賞','その他'],
+           of:r=>isG1(r.grade)||isJpn1(r.grade)?'G1・JpnⅠ':isGraded(r.grade)?'重賞':'その他'},
+};
+// 検証済みの系列色をそのまま使う（芝→緑・ダート→橙）
+const MAP_COLOR=['var(--s3)','var(--s2)','var(--s1)'];
+const mapFmt=(met,v)=>num(Math.round(v))+met.unit;
+
+let mapsPromise=null;
+function loadMaps(){
+  if(window.WP_MAPS) return Promise.resolve(window.WP_MAPS);
+  if(!mapsPromise) mapsPromise=new Promise((ok,ng)=>{
+    const s=document.createElement('script');
+    s.src='map-data.js';
+    s.onload=()=>window.WP_MAPS?ok(window.WP_MAPS):ng(new Error('中身が空です'));
+    s.onerror=()=>ng(new Error('map-data.js が見つかりません'));
+    document.head.appendChild(s);
+  });
+  return mapsPromise;
+}
+const mercY=lat=>{ const la=Math.max(-85,Math.min(85,lat))*Math.PI/180;
+  return (1-Math.log(Math.tan(la)+1/Math.cos(la))/Math.PI)/2; };
+// 緯度経度を下絵と同じ座標系に落とす関数を、表示範囲から作る
+function projector(v){
+  const [l0,b0,l1,b1]=v.bbox;
+  const x0=(l0+180)/360, y0=mercY(b1), k=v.w/((l1+180)/360-x0);
+  return (lat,lon)=>[((lon+180)/360-x0)*k,(mercY(lat)-y0)*k];
+}
+
+function viewMap(){
+  const t=(id,label)=>'<button class="tabbtn'+(MP.view===id?' on':'')+'" data-mv="'+id+'">'+label+'</button>';
+  const sel=(id,cur,opts)=>'<select id="'+id+'">'+opts.map(([v,l])=>
+    '<option value="'+v+'"'+(cur===v?' selected':'')+'>'+esc(l)+'</option>').join('')+'</select>';
+  return '<h1>地図</h1><div class="sub">競馬場ごとの成績を地図の上に並べています。'
+    +'棒の高さがその競馬場での大きさ、色が内訳です。棒を押すと競馬場のページへ移動します。</div>'
+    +'<div class="tabs">'+MAP_VIEWS.map(([i,l])=>t(i,l)).join('')+'</div>'
+    +'<div class="filters">'
+    +sel('mmetric',MP.metric,Object.entries(MAP_METRICS).map(([k,v])=>[k,v.label]))
+    +sel('msplit',MP.split,Object.entries(MAP_SPLITS).map(([k,v])=>[k,v.label]))
+    +'</div><div id="mapbody"><div class="card"><div class="mapempty">地図を読み込んでいます…</div></div></div>';
+}
+
+// 表示範囲に入る競馬場を集計して、棒の元になる値をそろえる
+function mapData(){
+  const v=window.WP_MAPS.views[MP.view], VN=window.WP_MAPS.venues;
+  const [l0,b0,l1,b1]=v.bbox, pr=projector(v);
+  const met=MAP_METRICS[MP.metric], sp=MAP_SPLITS[MP.split];
+  const by=new Map();
+  for(const r of DB.runs){ if(!r.place) continue;
+    if(!by.has(r.place)) by.set(r.place,[]); by.get(r.place).push(r); }
+  const items=[], missing=[];
+  for(const [place,rs] of by){
+    const ll=VN[place];
+    if(!ll){ missing.push(place); continue; }
+    if(ll[0]<b0||ll[0]>b1||ll[1]<l0||ll[1]>l1) continue;
+    const a=agg(rs), total=met.of(a);
+    if(!(total>0)) continue;
+    const segs=sp.keys.map(k=>met.of(agg(rs.filter(r=>sp.of(r)===k))));
+    const [x,y]=pr(ll[0],ll[1]);
+    items.push({place,a,total,segs,x,y,bx:x});
+  }
+  return {v,items,met,sp,missing};
+}
+
+// 上だけ角を丸めた棒。下端は必ず基準線に付ける
+function segPath(x,yTop,w,h,r){
+  const rr=Math.max(0,Math.min(r,w/2,h)), n1=v=>Math.round(v*10)/10;
+  return 'M'+n1(x)+' '+n1(yTop+h)+'V'+n1(yTop+rr)+'q0 '+n1(-rr)+' '+n1(rr)+' '+n1(-rr)
+    +'h'+n1(w-2*rr)+'q'+n1(rr)+' 0 '+n1(rr)+' '+n1(rr)+'V'+n1(yTop+h)+'Z';
+}
+
+function mapSvg(d){
+  const {v,items,met,sp}=d, n1=x=>Math.round(x*10)/10;
+  const BW=Math.max(7,Math.round(v.w/78)), MAXH=v.h*0.30, GAP=1.6;
+  const top=Math.max(...items.map(i=>i.total));
+  for(const it of items) it.h=Math.max(3,it.total/top*MAXH);
+
+  // 近すぎる棒は横にずらし、本来の位置へは引き出し線でつなぐ
+  const gap=BW*1.45;
+  items.sort((a,b)=>a.x-b.x||a.y-b.y);
+  for(let pass=0;pass<60;pass++){
+    let moved=false;
+    for(let i=0;i<items.length;i++) for(let j=i+1;j<items.length;j++){
+      const A=items[i],B=items[j], dx=B.bx-A.bx;
+      if(Math.abs(dx)>=gap) continue;
+      if(A.y<B.y-B.h||B.y<A.y-A.h) continue;        // 縦に重ならないなら放置
+      const push=(gap-Math.abs(dx))/2+0.05, s=dx<0?-1:1;
+      A.bx-=s*push; B.bx+=s*push; moved=true;
+    }
+    if(!moved) break;
+  }
+
+  let bars='';
+  for(const it of items){
+    const x=it.bx-BW/2;
+    const last=it.segs.reduce((m,val,i)=>val>0?i:m,-1);
+    let cy=it.y, segs='';
+    for(let i=0;i<it.segs.length;i++){
+      const val=it.segs[i]; if(!(val>0)) continue;
+      const sh=val/it.total*it.h, yTop=cy-sh;
+      const pad=i===last?0:Math.min(GAP,sh*0.4), hh=Math.max(1,sh-pad);
+      segs+= i===last
+        ? '<path class="seg" d="'+segPath(x,yTop,BW,hh,3)+'" fill="'+MAP_COLOR[i]+'"/>'
+        : '<rect class="seg" x="'+n1(x)+'" y="'+n1(yTop+pad)+'" width="'+BW+'" height="'+n1(hh)+'"'
+          +' fill="'+MAP_COLOR[i]+'"/>';
+      cy=yTop;
+    }
+    const breakdown=sp.keys.map((k,i)=>k+' '+mapFmt(met,it.segs[i])).join(' ／ ');
+    const sum=it.a.n+'走 '+it.a.w+'勝 勝率'+rate(it.a)+' ／ '+met.label+' '+mapFmt(met,it.total);
+    bars+='<a class="bar" href="#/venue/'+encodeURIComponent(it.place)+'"'
+      +' data-place="'+esc(shortPlace(it.place))+'"'
+      +' data-sum="'+esc(sum)+'" data-bd="'+esc(breakdown)+'">'
+      +(Math.abs(it.bx-it.x)>1.5
+        ? '<line class="lead" x1="'+n1(it.x)+'" y1="'+n1(it.y)+'" x2="'+n1(it.bx)+'" y2="'+n1(it.y)+'"/>' : '')
+      +'<circle class="pin" cx="'+n1(it.x)+'" cy="'+n1(it.y)+'" r="2.1"/>'+segs
+      +'<rect class="halo" x="'+n1(x-1.6)+'" y="'+n1(it.y-it.h-1.6)+'" width="'+n1(BW+3.2)
+      +'" height="'+n1(it.h+3.2)+'" rx="4"/>'
+      +'<title>'+esc(shortPlace(it.place))+' — '+esc(sum)+'</title></a>';
+  }
+
+  // 直接ラベルは大きい順に置き、先に置いたものと重なるぶんは諦める
+  const fs=Math.round(v.w/55), placed=[];
+  let labels='';
+  for(const it of [...items].sort((a,b)=>b.total-a.total)){
+    if(placed.length>=14) break;
+    const name=shortPlace(it.place);
+    const bw=name.length*fs*1.02, bx=it.bx-bw/2, by=it.y-it.h-fs*1.35;
+    if(by<2) continue;
+    if(placed.some(p=>bx<p.x+p.w+2&&p.x<bx+bw+2&&by<p.y+p.h+2&&p.y<by+fs*1.2+2)) continue;
+    placed.push({x:bx,y:by,w:bw,h:fs*1.2});
+    labels+='<text class="blabel" x="'+n1(it.bx)+'" y="'+n1(it.y-it.h-fs*0.45)+'" font-size="'+fs+'">'
+      +esc(name)+'</text>';
+  }
+
+  const legend='<div class="maplegend">'+sp.keys.map((k,i)=>
+    '<span><i style="background:'+MAP_COLOR[i]+'"></i>'+esc(k)+'</span>').join('')
+    +'<span style="margin-left:auto">棒の高さ＝'+esc(met.label)+'</span></div>';
+
+  return '<div class="mapfig"><svg class="map" viewBox="0 0 '+v.w+' '+v.h+'" role="img"'
+    +' aria-label="競馬場ごとの'+esc(met.label)+'を示した地図">'
+    +'<path class="land" d="'+v.d+'"/><g>'+bars+'</g><g>'+labels+'</g></svg>'
+    +'<div class="mapinfo" id="mapinfo"><b>'+esc(MAP_VIEWS.find(x=>x[0]===MP.view)[1])+'</b>'
+    +'<span>'+items.length+'競馬場・棒の高さは'+esc(met.label)+'</span></div></div>'+legend;
+}
+
+function mapTable(d){
+  const {items,met,sp}=d;
+  const list=[...items].sort((a,b)=>b.total-a.total);
+  let h='<div class="card"><h2>'+esc(met.label)+'の多い順</h2><div class="scroll"><table><thead><tr>'
+    +'<th>競馬場</th><th class="num">出走</th><th class="num">1着</th><th class="num">勝率</th>'
+    +sp.keys.map(k=>'<th class="num">'+esc(k)+'</th>').join('')
+    +'<th class="num">'+esc(met.label)+'</th></tr></thead><tbody>';
+  for(const x of list)
+    h+='<tr><td><b><a class="link" href="#/venue/'+encodeURIComponent(x.place)+'">'
+      +esc(shortPlace(x.place))+'</a></b></td>'
+      +'<td class="num">'+x.a.n+'</td><td class="num'+(x.a.w?' win':'')+'">'+(x.a.w||'')+'</td>'
+      +'<td class="num">'+rate(x.a)+'</td>'
+      +x.segs.map(v=>'<td class="num">'+(v>0?num(Math.round(v)):'')+'</td>').join('')
+      +'<td class="num">'+mapFmt(met,x.total)+'</td></tr>';
+  return h+'</tbody></table></div></div>';
+}
+
+function drawMap(){
+  const body=document.getElementById('mapbody');
+  if(!body||!window.WP_MAPS) return;
+  const d=mapData();
+  if(!d.items.length){
+    body.innerHTML='<div class="card"><div class="mapempty">'
+      +'この範囲に出走記録のある競馬場がありません。</div></div>'; return;
+  }
+  const side=MP.view==='jp'||MP.view==='eu';
+  body.innerHTML='<div class="maplay'+(side?' side':'')+'">'
+    +'<div class="card">'+mapSvg(d)+'</div>'+mapTable(d)+'</div>'
+    +'<div class="note">'+d.items.length+'競馬場を表示しています。'
+    +'近い競馬場の棒は読めるように横へずらしてあり、細い線が本来の位置を指しています。'
+    +'選んだ指標が0の競馬場は出ません（勝利数で表示すると未勝利の競馬場が消えます）。'
+    +(d.missing.length?'　位置が未登録の競馬場: '+d.missing.map(esc).join('、')
+      +'（tools/venues.json に緯度経度を足すと出ます）':'')+'</div>';
+  const info=document.getElementById('mapinfo'), def=info.innerHTML;
+  document.querySelectorAll('.map .bar').forEach(b=>{
+    b.addEventListener('mouseenter',()=>{
+      info.innerHTML='<b>'+esc(b.dataset.place)+'</b><span>'+esc(b.dataset.sum)+'</span>'
+        +'<span>'+esc(b.dataset.bd)+'</span>'; });
+    b.addEventListener('mouseleave',()=>{ info.innerHTML=def; });
+  });
+}
+
+function bindMap(){
+  document.querySelectorAll('[data-mv]').forEach(b=>b.onclick=()=>{
+    MP.view=b.dataset.mv;
+    document.getElementById('app').innerHTML=viewMap(); bindMap();
+  });
+  const on=(id,k)=>{ const e=document.getElementById(id);
+    if(e) e.onchange=ev=>{ MP[k]=ev.target.value; drawMap(); }; };
+  on('mmetric','metric'); on('msplit','split');
+  loadMaps().then(drawMap).catch(err=>{
+    const b=document.getElementById('mapbody');
+    if(b) b.innerHTML='<div class="card"><div class="mapempty">地図の下絵を読み込めませんでした（'
+      +esc(err.message)+'）。<br>index.html と同じ場所に map-data.js を置いてください。</div></div>';
+  });
+}
+
 /* ============ ルーター ============ */
 function render(){
   if(!DB) return;
@@ -1962,6 +2203,7 @@ function render(){
   else if(hash.startsWith('#/venue/')){ app.innerHTML=viewVenue(decodeURIComponent(hash.slice(8))); route='courses'; }
   else if(hash.startsWith('#/race/')){ app.innerHTML=viewRace(decodeURIComponent(hash.slice(7))); route='courses'; }
   else if(hash.startsWith('#/courses')){ app.innerHTML=viewCourses(); bindCourses(); route='courses'; }
+  else if(hash.startsWith('#/map')){ app.innerHTML=viewMap(); bindMap(); route='map'; }
   else if(hash.startsWith('#/records')){ app.innerHTML=viewRecords(); bindRecords(); route='records'; }
   else if(hash.startsWith('#/summary')){ app.innerHTML=viewSummary(); bindSummary(); route='summary'; }
   else if(hash.startsWith('#/trainers')){ app.innerHTML=viewTrainers(); bindPeople('trainers'); route='trainers'; }
