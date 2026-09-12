@@ -194,6 +194,9 @@ text.dlabel{fill:var(--ink);font-size:12.5px;font-weight:700}
 svg.map{display:block;width:100%;height:auto;border-radius:12px;background:var(--sea)}
 .map .land{fill:var(--land);stroke:var(--landline);stroke-width:.6;stroke-linejoin:round}
 .map .pin{fill:var(--muted);opacity:.7}
+.map .shade{fill:#000;opacity:.32;pointer-events:none}
+.map .gloss{fill:#fff;opacity:.24;pointer-events:none}
+.map .edge{fill:none;stroke:#000;stroke-width:.5;opacity:.25;pointer-events:none}
 .map .lead{stroke:var(--muted);stroke-width:.9;opacity:.45}
 .map .bar{cursor:pointer}
 .map .bar:hover .seg{filter:brightness(1.18)}
@@ -1507,12 +1510,82 @@ function venueList(){
     +'<div class="note">'+by.size+'競馬場・'+num(DB.runs.length)+'走を集計しています。競馬場名から個別ページへ移動できます。</div>';
 }
 
+// コース形態。スプレッドシートには無い情報なので、実在の競馬場の作りを手で入れている。
+// [回り, 特徴]。ゲーム内の設定と食い違う場合はここを直す。
+const COURSE_INFO={
+  '札幌競馬場':['右回り','洋芝・ほぼ平坦、直線269m'],
+  '函館競馬場':['右回り','洋芝、直線262mでゴール前は上り坂'],
+  '福島競馬場':['右回り','小回り・平坦、直線292m'],
+  '新潟競馬場':['左回り','直線659m（外回り）。芝1000mの直線コースを持つ'],
+  '東京競馬場':['左回り','直線525m・高低差2.7m。広くて長い直線'],
+  '中山競馬場':['右回り','直線310m、ゴール前に急坂（高低差5.3m）'],
+  '中京競馬場':['左回り','直線412m、ゴール前に急坂'],
+  '京都競馬場':['右回り','直線404m。外回りは3コーナーに上り下りの坂'],
+  '阪神競馬場':['右回り','直線473m（外回り）、ゴール前に急坂'],
+  '小倉競馬場':['右回り','小回り・平坦、直線293m'],
+  '門別競馬場':['右回り','ダート'],
+  '盛岡競馬場':['左回り','芝とダートの両方を持つ'],
+  '浦和競馬場':['左回り','ダート・小回り'],
+  '船橋競馬場':['左回り','ダート'],
+  '大井競馬場':['右回り','ダート。内回りと外回りの2つの周回を持つ'],
+  '川崎競馬場':['左回り','ダート'],
+  '金沢競馬場':['右回り','ダート・小回り'],
+  '名古屋競馬場':['右回り','ダート・小回り'],
+  '園田競馬場':['右回り','ダート・小回り'],
+  '佐賀競馬場':['右回り','ダート・小回り'],
+  'サンタアニタ競馬場':['左回り','ダートと芝。西海岸の主場'],
+  'ベルモントパーク競馬場':['左回り','1周2000mの大きなダート'],
+  'サラトガ競馬場':['左回り','ダートと芝'],
+  'チャーチルダウンズ競馬場':['左回り','ケンタッキーダービーの舞台'],
+  'ガルフストリームパーク競馬場':['左回り','ダートと芝'],
+  'デルマー競馬場':['左回り','ダートと芝'],
+  'キーンランド競馬場':['左回り','ダートと芝'],
+  'オークローンパーク競馬場':['左回り','ダート'],
+  'アケダクト競馬場':['左回り','ダート'],
+  'フェアグラウンズ競馬場':['左回り','ダートと芝'],
+  'ロスアラミトス競馬場':['左回り','ダート・小回り'],
+  'ピムリコ競馬場':['左回り','プリークネスSの舞台'],
+  'モンマスパーク競馬場':['左回り','ダートと芝'],
+  'ウッドバイン競馬場':['左回り','カナダ。芝とオールウェザー'],
+  'アスコット競馬場':['右回り','ロイヤルアスコットの舞台。直線コースも持つ'],
+  'ヨーク競馬場':['左回り','平坦で広い'],
+  'ニューマーケット競馬場':['直線主体','1マイルまでは直線。長距離のみ右へ曲がる'],
+  'エプソムダウンズ競馬場':['左回り','起伏と傾斜が大きい。英ダービーの舞台'],
+  'グッドウッド競馬場':['右回り','丘陵地で起伏がある'],
+  'ドンカスター競馬場':['左回り','平坦。セントレジャーの舞台'],
+  'サンダウンパーク競馬場':['右回り','ゴール前に上り坂'],
+  'ヘイドックパーク競馬場':['左回り','平坦'],
+  'ニューベリー競馬場':['左回り','平坦で広い'],
+  'パリロンシャン競馬場':['右回り','凱旋門賞の舞台。フォルスストレートを持つ'],
+  'サンクルー競馬場':['左回り','パリ近郊'],
+  'シャンティイ競馬場':['左回り','仏ダービーの舞台'],
+  'ドーヴィル競馬場':['右回り','芝とダート。夏の開催地'],
+  'カラ競馬場':['右回り','アイルランドのクラシック開催地'],
+  'レパーズダウン競馬場':['左回り','ダブリン近郊'],
+  'バーデンバーデン競馬場':['左回り','ドイツ'],
+  'ハンブルク競馬場':['左回り','ドイツダービーの舞台'],
+  'ホッペガルテン競馬場':['左回り','ベルリン近郊'],
+  'シャティン競馬場':['右回り','香港。芝とオールウェザー'],
+  'メイダン競馬場':['左回り','ドバイ。芝とオールウェザー'],
+  'キングアブドゥルアジーズ競馬場':['左回り','サウジアラビア'],
+  'フレミントン競馬場':['左回り','メルボルンカップの舞台。直線コースも持つ'],
+  'ロイヤルランドウィック競馬場':['左回り','シドニー'],
+  'コーフィールド競馬場':['左回り','メルボルン'],
+  'ムーニーバレー競馬場':['左回り','小回りで直線が短い'],
+  'ローズヒルガーデンズ競馬場':['左回り','シドニー近郊'],
+};
+
 function viewVenue(place){
   const rs=DB.runs.filter(r=>r.place===place);
   if(!rs.length) return '<h1>該当なし</h1><div class="sub">「'+esc(place)+'」の出走記録はありません。</div>';
   const a=agg(rs);
+  const ci=COURSE_INFO[place];
   let s='<div class="card"><div class="hero-h"><div class="name">'+esc(shortPlace(place))+'</div>'
-    +'<div class="tags"><span class="tag">'+esc(venueRegion(place))+'</span></div></div>'
+    +'<div class="tags"><span class="tag">'+esc(venueRegion(place))+'</span>'
+    +(ci?'<span class="tag">'+esc(ci[0])+'</span>':'')+'</div></div>'
+    +(ci?'<div class="note" style="margin-top:10px">コース形態 … '+esc(ci[1])
+        +'<span class="dim">（実在の競馬場の作りです。シートには無い情報なので、'
+        +'ゲーム内の設定と違う場合があります）</span></div>':'')
     +'<div class="stats" style="margin-top:16px">'
     +tile(a.n,'出走')+tile(a.w,'1着')+tile(a.p2,'2着')+tile(a.p3,'3着')
     +tile(rate(a),'勝率')+tile(rate2(a),'連対率')+tile(a.g1+a.jpn1,'G1勝')+tile(num(a.prize),'獲得賞金')
@@ -2046,21 +2119,21 @@ function mapData(){
   return {v,items,met,sp,missing};
 }
 
-// 上だけ角を丸めた棒。下端は必ず基準線に付ける
-function segPath(x,yTop,w,h,r){
-  const rr=Math.max(0,Math.min(r,w/2,h)), n1=v=>Math.round(v*10)/10;
-  return 'M'+n1(x)+' '+n1(yTop+h)+'V'+n1(yTop+rr)+'q0 '+n1(-rr)+' '+n1(rr)+' '+n1(-rr)
-    +'h'+n1(w-2*rr)+'q'+n1(rr)+' 0 '+n1(rr)+' '+n1(rr)+'V'+n1(yTop+h)+'Z';
-}
+// 4点を結ぶ面。立体の側面と天面に使う
+function quad(p){ const n1=v=>Math.round(v*10)/10;
+  return 'M'+p.map(q=>n1(q[0])+' '+n1(q[1])).join('L')+'Z'; }
 
 function mapSvg(d){
   const {v,items,met,sp}=d, n1=x=>Math.round(x*10)/10;
-  const BW=Math.max(7,Math.round(v.w/78)), MAXH=v.h*0.30, GAP=1.6;
+  // 世界地図は日本に20場が固まるので、柱を細く・間隔を詰める。それでも足りない分は重ねる
+  const wide=MP.view==='world';
+  const BW=Math.max(7,Math.round(v.w/(wide?95:78))), MAXH=v.h*0.30, GAP=1.6;
   const top=Math.max(...items.map(i=>i.total));
   for(const it of items) it.h=Math.max(3,it.total/top*MAXH);
+  const DX=BW*0.42, DY=-BW*0.30;
 
   // 近すぎる棒は横にずらし、本来の位置へは引き出し線でつなぐ
-  const gap=BW*1.45;
+  const gap=BW*(wide?0.62:1.45);
   items.sort((a,b)=>a.x-b.x||a.y-b.y);
   for(let pass=0;pass<60;pass++){
     let moved=false;
@@ -2073,22 +2146,38 @@ function mapSvg(d){
     }
     if(!moved) break;
   }
+  // 画面からはみ出させない。柱は奥行きのぶん右上へ伸びる
+  const loX=BW/2+2, hiX=v.w-BW/2-DX-2;
+  for(const it of items) it.bx=Math.max(loX,Math.min(hiX,it.bx));
 
+  // 奥（地図の上）から手前へ描くと、手前の柱が奥の柱にきちんと重なる
   let bars='';
-  for(const it of items){
-    const x=it.bx-BW/2;
-    const last=it.segs.reduce((m,val,i)=>val>0?i:m,-1);
-    let cy=it.y, segs='';
-    for(let i=0;i<it.segs.length;i++){
-      const val=it.segs[i]; if(!(val>0)) continue;
+  for(const it of [...items].sort((a,b)=>a.y-b.y)){
+    const x=it.bx-BW/2, yb=it.y;
+    let last=it.segs.reduce((m,val,i)=>val>0?i:m,-1);
+    const segsIn = last<0 ? [it.total] : it.segs;   // 内訳が取れないときは1本の柱にする
+    if(last<0) last=0;
+    let cy=yb, faces='', yTopFace=yb;
+    for(let i=0;i<segsIn.length;i++){
+      const val=segsIn[i]; if(!(val>0)) continue;
       const sh=val/it.total*it.h, yTop=cy-sh;
-      const pad=i===last?0:Math.min(GAP,sh*0.4), hh=Math.max(1,sh-pad);
-      segs+= i===last
-        ? '<path class="seg" d="'+segPath(x,yTop,BW,hh,3)+'" fill="'+MAP_COLOR[i]+'"/>'
-        : '<rect class="seg" x="'+n1(x)+'" y="'+n1(yTop+pad)+'" width="'+BW+'" height="'+n1(hh)+'"'
-          +' fill="'+MAP_COLOR[i]+'"/>';
+      const pad=i===last?0:Math.min(GAP,sh*0.4), hh=Math.max(1,sh-pad), yy=yTop+pad;
+      const c=MAP_COLOR[i];
+      faces+='<rect x="'+n1(x)+'" y="'+n1(yy)+'" width="'+BW+'" height="'+n1(hh)+'" fill="'+c+'"/>'
+        +'<path d="'+quad([[x+BW,yy],[x+BW+DX,yy+DY],[x+BW+DX,yy+hh+DY],[x+BW,yy+hh]])+'" fill="'+c+'"/>';
+      if(i===last) yTopFace=yy;
       cy=yTop;
     }
+    // 側面をまとめて暗く、天面を明るくして立体に見せる
+    faces+='<path class="shade" d="'+quad([[x+BW,yTopFace],[x+BW+DX,yTopFace+DY],
+            [x+BW+DX,yb+DY],[x+BW,yb]])+'"/>'
+      +'<path d="'+quad([[x,yTopFace],[x+DX,yTopFace+DY],[x+BW+DX,yTopFace+DY],[x+BW,yTopFace]])
+      +'" fill="'+MAP_COLOR[last]+'"/>'
+      +'<path class="gloss" d="'+quad([[x,yTopFace],[x+DX,yTopFace+DY],
+            [x+BW+DX,yTopFace+DY],[x+BW,yTopFace]])+'"/>'
+      +'<path class="edge" d="'+quad([[x,yTopFace],[x+DX,yTopFace+DY],
+            [x+BW+DX,yTopFace+DY],[x+BW,yTopFace]])+'"/>';
+
     const breakdown=sp.keys.map((k,i)=>k+' '+mapFmt(met,it.segs[i])).join(' ／ ');
     const sum=it.a.n+'走 '+it.a.w+'勝 勝率'+rate(it.a)+' ／ '+met.label+' '+mapFmt(met,it.total);
     bars+='<a class="bar" href="#/venue/'+encodeURIComponent(it.place)+'"'
@@ -2096,9 +2185,9 @@ function mapSvg(d){
       +' data-sum="'+esc(sum)+'" data-bd="'+esc(breakdown)+'">'
       +(Math.abs(it.bx-it.x)>1.5
         ? '<line class="lead" x1="'+n1(it.x)+'" y1="'+n1(it.y)+'" x2="'+n1(it.bx)+'" y2="'+n1(it.y)+'"/>' : '')
-      +'<circle class="pin" cx="'+n1(it.x)+'" cy="'+n1(it.y)+'" r="2.1"/>'+segs
-      +'<rect class="halo" x="'+n1(x-1.6)+'" y="'+n1(it.y-it.h-1.6)+'" width="'+n1(BW+3.2)
-      +'" height="'+n1(it.h+3.2)+'" rx="4"/>'
+      +'<circle class="pin" cx="'+n1(it.x)+'" cy="'+n1(it.y)+'" r="2.1"/>'+faces
+      +'<rect class="halo" x="'+n1(x-1.6)+'" y="'+n1(yTopFace+DY-1.6)+'" width="'+n1(BW+DX+3.2)
+      +'" height="'+n1(yb-yTopFace-DY+3.2)+'" rx="4"/>'
       +'<title>'+esc(shortPlace(it.place))+' — '+esc(sum)+'</title></a>';
   }
 
@@ -2108,11 +2197,12 @@ function mapSvg(d){
   for(const it of [...items].sort((a,b)=>b.total-a.total)){
     if(placed.length>=14) break;
     const name=shortPlace(it.place);
-    const bw=name.length*fs*1.02, bx=it.bx-bw/2, by=it.y-it.h-fs*1.35;
+    const cx=it.bx+DX/2, ty=it.y-it.h+DY;           // 天面の中心の真上に置く
+    const bw=name.length*fs*1.02, bx=cx-bw/2, by=ty-fs*1.35;
     if(by<2) continue;
     if(placed.some(p=>bx<p.x+p.w+2&&p.x<bx+bw+2&&by<p.y+p.h+2&&p.y<by+fs*1.2+2)) continue;
     placed.push({x:bx,y:by,w:bw,h:fs*1.2});
-    labels+='<text class="blabel" x="'+n1(it.bx)+'" y="'+n1(it.y-it.h-fs*0.45)+'" font-size="'+fs+'">'
+    labels+='<text class="blabel" x="'+n1(cx)+'" y="'+n1(ty-fs*0.45)+'" font-size="'+fs+'">'
       +esc(name)+'</text>';
   }
 
