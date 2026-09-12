@@ -9,8 +9,8 @@
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect width='32' height='32' rx='5' fill='%230f7a4c'/><path d='M10 25.5V15.5a6 6 0 0 1 12 0v10' fill='none' stroke='%23fff' stroke-width='4' stroke-linecap='round'/></svg>">
 <style>
 :root{
-  --bg:#eef5f1; --panel:#fff; --panel2:#f4faf7; --line:#dae7e0;
-  --ink:#16261e; --muted:#4a5b51;
+  --bg:#f3f8f5; --panel:#fff; --panel2:#f7fbf9; --line:#e0ebe4;
+  --ink:#16261e; --muted:#4f6157;
   --accent:#0f7a4c; --accent-soft:#ddf3e8;
   --gold:#c08a08; --gold-ink:#8a6205; --gold-soft:#fff2ce;
   --jp:#d43f38; --us:#2166cf; --eu:#7a4bc6;
@@ -19,24 +19,26 @@
   --g1:#2b6cd4; --g2:#b83226; --g3:#66b84f; --gx:#8a9490;
   --on-bright:#fff;
   --shadow:0 1px 2px rgba(16,60,40,.04);
-  --edge:#d7e3db;
+  --edge:#dfeae3;
+  --shoe:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Cpath d='M10 25.5V15.5a6 6 0 0 1 12 0v10' fill='none' stroke='%23000' stroke-width='4.5' stroke-linecap='round'/%3E%3C/svg%3E");
 }
 :root[data-theme="dark"]{
-  --bg:#111815; --panel:#1a221e; --panel2:#222c27; --line:#2f3b34;
-  --ink:#eaf3ed; --muted:#9db1a5;
-  --accent:#57d497; --accent-soft:#172b22;
-  --gold:#e9c05a; --gold-ink:#f0cd75; --gold-soft:#33290f;
-  --jp:#f9756c; --us:#6fa8f7; --eu:#b489f5;
+  /* 真っ黒に寄せず、緑を含んだ明るめの地色にしている */
+  --bg:#1a231f; --panel:#232e28; --panel2:#2c3831; --line:#3a4740;
+  --ink:#edf5f0; --muted:#a9bcb0;
+  --accent:#5fdba0; --accent-soft:#1e3629;
+  --gold:#edc766; --gold-ink:#f3d283; --gold-soft:#3d3114;
+  --jp:#fb8279; --us:#7db2f8; --eu:#bc94f6;
   --s1:#3987e5; --s2:#d95926; --s3:#199e70;
-  --sea:#141d1a; --land:#252e29; --landline:#3c4841;
-  --g1:#4d8fe3; --g2:#bf3d2e; --g3:#4aa350; --gx:#7c8a82;
-  --on-bright:#101713;
-  --shadow:0 1px 2px rgba(0,0,0,.3);
-  --edge:#33403a;
+  --sea:#1b2521; --land:#2e3a34; --landline:#47554d;
+  --g1:#4d8fe3; --g2:#bf3d2e; --g3:#4aa350; --gx:#8a988f;
+  --on-bright:#131c17;
+  --shadow:0 1px 2px rgba(0,0,0,.25);
+  --edge:#3e4c44;
 }
 *{box-sizing:border-box}
 body{margin:0;background:var(--bg);color:var(--ink);
-  font-family:"Hiragino Kaku Gothic ProN","Yu Gothic",YuGothic,Meiryo,system-ui,sans-serif;
+  font-family:"Hiragino Kaku Gothic ProN",Meiryo,"Yu Gothic",YuGothic,system-ui,sans-serif;
   line-height:1.7;-webkit-text-size-adjust:100%}
 /* 見出しは明朝。競馬の記録という題材に合うのと、ゴシック一色の平板さを避けるため */
 .mincho,h1,.yr>summary>span:first-child,.leg-name,.hero-h .name{
@@ -49,7 +51,12 @@ a.link:hover{opacity:.7}
 header{position:sticky;top:0;z-index:20;background:var(--panel);border-bottom:1px solid var(--edge)}
 header::after{content:"";display:block;height:2px;background:var(--accent)}
 .hd{max-width:1400px;margin:0 auto;padding:11px 16px;display:flex;gap:14px;align-items:center;flex-wrap:wrap}
-.brand{font-weight:700;font-size:16px;letter-spacing:.04em;white-space:nowrap;color:var(--accent)}
+.brand{font-weight:700;font-size:17px;letter-spacing:.04em;white-space:nowrap;color:var(--accent);
+  font-family:"Hiragino Mincho ProN","Yu Mincho",YuMincho,"Noto Serif JP","Times New Roman",serif;
+  display:inline-flex;align-items:center;gap:8px;transition:.12s}
+.brand::before{content:"";width:17px;height:17px;flex:0 0 17px;border-radius:3px;background:var(--accent);
+  -webkit-mask:var(--shoe) center/13px no-repeat; mask:var(--shoe) center/13px no-repeat}
+.brand:hover{opacity:.72}
 nav{display:flex;gap:4px;flex-wrap:wrap}
 nav a{padding:6px 10px 5px;font-size:14px;color:var(--muted);transition:.12s;
   border-bottom:2px solid transparent}
@@ -195,6 +202,33 @@ text.dlabel{fill:var(--ink);font-size:12.5px;font-weight:700}
 .chk{display:inline-flex;align-items:center;gap:6px;font-size:13.5px;color:var(--muted);
   padding:7px 12px;border:1px solid var(--line);border-radius:4px;background:var(--panel);cursor:pointer}
 .chk input{accent-color:var(--accent);margin:0}
+
+/* ---- ポータル ---- */
+.pt-hero{padding:26px 0 22px;border-bottom:1px solid var(--edge);margin-bottom:26px}
+.pt-hero h1{font-size:34px;margin:0 0 8px;line-height:1.3}
+.pt-hero .lead{color:var(--muted);font-size:14px;max-width:46em}
+.pt-nums{display:grid;grid-template-columns:repeat(auto-fit,minmax(112px,1fr));
+  gap:1px;background:var(--edge);border:1px solid var(--edge);border-radius:4px;
+  overflow:hidden;margin-bottom:28px}
+.pt-num{background:var(--panel);padding:14px 16px}
+.pt-num b{display:block;font-size:22px;font-weight:700;line-height:1.25;
+  font-variant-numeric:tabular-nums;letter-spacing:.01em}
+.pt-num span{display:block;font-size:11px;color:var(--muted);margin-top:2px;letter-spacing:.04em}
+.pt-sec{font-size:12px;letter-spacing:.12em;color:var(--accent);font-weight:700;
+  margin:0 0 12px;padding-bottom:7px;border-bottom:1px solid var(--edge)}
+.pt-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(230px,1fr));
+  gap:12px;margin-bottom:30px}
+.pt-card{display:block;border:1px solid var(--edge);border-radius:4px;padding:15px 17px;
+  background:var(--panel);transition:.12s}
+.pt-card:hover{border-color:var(--accent);background:var(--panel2)}
+.pt-card b{display:block;font-size:15.5px;font-weight:700;margin-bottom:3px}
+.pt-card span{display:block;font-size:12px;color:var(--muted);line-height:1.65}
+.pt-latest{display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:12px}
+.pt-champ{border:1px solid var(--edge);border-left:3px solid var(--gold);border-radius:0 4px 4px 0;
+  padding:12px 15px;background:var(--panel)}
+.pt-champ .reg{font-size:11px;color:var(--muted);letter-spacing:.06em}
+.pt-champ .nm{font-size:17px;font-weight:700;margin:2px 0 1px}
+.pt-champ .rc{font-size:11.5px;color:var(--muted);font-variant-numeric:tabular-nums}
 
 /* ---- 入力 ---- */
 .inmsg{margin-top:12px;font-size:13px;font-weight:700;text-align:center;min-height:18px;white-space:pre-wrap}
@@ -349,7 +383,7 @@ svg.map{display:block;width:100%;height:auto;border-radius:3px;background:var(--
 <body>
 <script>try{document.documentElement.dataset.theme=localStorage.getItem('wp-theme')||'dark'}catch(e){document.documentElement.dataset.theme='dark'}</script>
 <header><div class="hd">
-  <span class="brand">🏇 エアリス牧場 年史</span>
+  <a class="brand" href="#/" title="ポータルへ">エアリス牧場 年史</a>
   <nav>
     <a href="#/summary" data-r="summary">年史</a>
     <a href="#/awards" data-r="awards">年度表彰</a>
@@ -2101,6 +2135,69 @@ function recordsBody(region){
   return s;
 }
 
+/* ============ 画面: ポータル ============ */
+const PORTAL_LINKS=[
+  ['#/summary','年史','年ごとの成績と出来事を追う'],
+  ['#/awards','年度表彰','地域ごとの最優秀馬を自動で選ぶ'],
+  ['#/legends','名馬列伝','G1を3勝以上した馬の経歴'],
+  ['#/horses','馬一覧','所有馬を条件で絞って探す'],
+  ['#/stallions','血統','種牡馬・繁殖牝馬・配合の分析'],
+  ['#/jockeys','騎手','騎乗数と勝利数'],
+  ['#/trainers','調教師','厩舎ごとの成績'],
+  ['#/courses','レース','競馬場別と重賞レース別'],
+  ['#/map','地図','競馬場ごとの成績を地図に並べる'],
+  ['#/records','記録','日本・アメリカ・欧州の記録'],
+  ['#/input','入力','出走登録・結果入力・新馬登録'],
+];
+
+function viewPortal(){
+  const runs=DB.runs, horses=[...DB.horses.values()];
+  const a=agg(runs);
+  // DB.years の並び順に頼らず、最小と最大を取る
+  const ys=DB.years.map(Number).filter(y=>y);
+  const y0=ys.length?Math.min.apply(null,ys):null;
+  const y1=ys.length?Math.max.apply(null,ys):null;
+  const nums=[
+    [num(horses.length),'所有馬'],
+    [num(runs.length),'出走'],
+    [num(a.w),'勝利'],
+    [rate(a),'勝率'],
+    [num(a.g1+a.jpn1),'G1・JpnⅠ'],
+    [num(a.prize),'獲得賞金'],
+  ];
+  let s='<div class="pt-hero"><h1>エアリス牧場 年史</h1>'
+    +'<div class="lead">'+(y0!==null?y0+'年から'+y1+'年までの':'')
+    +num(runs.length)+'走の記録です。'
+    +'スプレッドシートに入力した内容がそのまま集計され、'
+    +'年度表彰・血統・記録のページに反映されます。</div></div>';
+
+  s+='<div class="pt-nums">'+nums.map(([v,l])=>
+    '<div class="pt-num"><b>'+v+'</b><span>'+l+'</span></div>').join('')+'</div>';
+
+  // 直近の年の最優秀馬を出す
+  const y=y1;
+  const d=y!==null?DB.awards.byYear.get(y):null;
+  if(d){
+    const champs=REGIONS.map(r=>{
+      const c=(d.regs[r].list||[]).find(x=>x.cat==='最優秀馬');
+      return c&&c.win?{region:r,e:c.win}:null;
+    }).filter(Boolean);
+    if(champs.length){
+      s+='<h2 class="pt-sec">'+y+'年の最優秀馬</h2><div class="pt-latest">'
+        +champs.map(c=>'<div class="pt-champ"><div class="reg">'+esc(c.region)+'</div>'
+          +'<div class="nm">'+hlink(c.e.n)+'</div>'
+          +'<div class="rc">'+c.e.a.n+'戦'+c.e.a.w+'勝　賞金'+num(c.e.a.prize)+'</div></div>').join('')
+        +'</div>';
+    }
+  }
+
+  s+='<h2 class="pt-sec" style="margin-top:28px">ページ</h2><div class="pt-grid">'
+    +PORTAL_LINKS.map(([href,title,desc])=>'<a class="pt-card" href="'+href+'">'
+      +'<b>'+esc(title)+'</b><span>'+esc(desc)+'</span></a>').join('')
+    +'</div>';
+  return s;
+}
+
 /* ============ 画面: 入力 ============ */
 // スプレッドシートへの書き込みは GAS のウェブアプリ経由。
 // text/plain で送るとブラウザのプリフライトが起きないので、CORSを素通りできる。
@@ -2766,15 +2863,16 @@ function mapSvg(d){
   let bars='';
   for(const it of [...items].sort((a,b)=>a.y-b.y)){
     const x=it.bx-BW/2;
-    let last=it.segs.reduce((m,val,i)=>val>0?i:m,-1);
-    const segsIn = last<0 ? [it.total] : it.segs;   // 内訳が取れないときは1本の棒にする
-    if(last<0) last=0;
+    // 凡例の並び（G1→G2→G3→その他）がそのまま上から下になるよう、下から逆順に積む
+    const segsIn = it.segs.some(v=>v>0) ? it.segs : [it.total];
+    const order=segsIn.map((_,i)=>i).reverse().filter(i=>segsIn[i]>0);
+    const topIdx=order.length?order[order.length-1]:0;   // いちばん上に来る段
     let cy=it.y, segs='';
-    for(let i=0;i<segsIn.length;i++){
-      const val=segsIn[i]; if(!(val>0)) continue;
+    for(const i of order){
+      const val=segsIn[i];
       const sh=val/it.total*it.h, yTop=cy-sh;
-      const pad=i===last?0:Math.min(GAP,sh*0.4), hh=Math.max(1,sh-pad);
-      segs+= i===last
+      const pad=i===topIdx?0:Math.min(GAP,sh*0.4), hh=Math.max(1,sh-pad);
+      segs+= i===topIdx
         ? '<path class="seg" d="'+segPath(x,yTop,BW,hh,3)+'" fill="'+sp.colors[i]+'"/>'
         : '<rect class="seg" x="'+n1(x)+'" y="'+n1(yTop+pad)+'" width="'+BW+'" height="'+n1(hh)+'"'
           +' fill="'+sp.colors[i]+'"/>';
@@ -2878,7 +2976,7 @@ function bindMap(){
 /* ============ ルーター ============ */
 function render(){
   if(!DB) return;
-  const hash=location.hash||'#/awards';
+  const hash=location.hash||'#/';
   const app=document.getElementById('app');
   let route='awards';
   if(hash.startsWith('#/horse/')){ app.innerHTML=viewHorse(decodeURIComponent(hash.slice(8))); route='horses'; }
@@ -2894,6 +2992,7 @@ function render(){
   else if(hash.startsWith('#/venue/')){ app.innerHTML=viewVenue(decodeURIComponent(hash.slice(8))); route='courses'; }
   else if(hash.startsWith('#/race/')){ app.innerHTML=viewRace(decodeURIComponent(hash.slice(7))); route='courses'; }
   else if(hash.startsWith('#/courses')){ app.innerHTML=viewCourses(); bindCourses(); route='courses'; }
+  else if(hash==='#/'||hash===''||hash==='#'){ app.innerHTML=viewPortal(); route='portal'; }
   else if(hash.startsWith('#/input')){ app.innerHTML=viewInput(); bindInput(); route='input'; }
   else if(hash.startsWith('#/legends')){ app.innerHTML=viewLegends(); bindLegends(); route='legends'; }
   else if(hash.startsWith('#/map')){ app.innerHTML=viewMap(); bindMap(); route='map'; }
