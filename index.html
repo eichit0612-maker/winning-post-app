@@ -14,6 +14,7 @@
   --jp:#d43f38; --us:#2166cf; --eu:#7a4bc6;
   --s1:#2a78d6; --s2:#eb6834; --s3:#1baf7a;
   --sea:#e2ecf2; --land:#f6f3ec; --landline:#cfc8b9;
+  --g1:#2b6cd4; --g2:#b83226; --g3:#66b84f; --gx:#8a9490;
   --on-bright:#fff;
   --shadow:0 1px 2px rgba(16,60,40,.05),0 10px 28px rgba(16,60,40,.07);
 }
@@ -25,6 +26,7 @@
   --jp:#f9756c; --us:#6fa8f7; --eu:#b489f5;
   --s1:#3987e5; --s2:#d95926; --s3:#199e70;
   --sea:#141d1a; --land:#252e29; --landline:#3c4841;
+  --g1:#4d8fe3; --g2:#bf3d2e; --g3:#4aa350; --gx:#7c8a82;
   --on-bright:#101713;
   --shadow:0 1px 2px rgba(0,0,0,.45),0 10px 28px rgba(0,0,0,.4);
 }
@@ -187,6 +189,21 @@ text.dlabel{fill:var(--ink);font-size:12.5px;font-weight:700}
   padding:7px 12px;border:1px solid var(--line);border-radius:10px;background:var(--panel);cursor:pointer}
 .chk input{accent-color:var(--accent);margin:0}
 
+/* ---- 名馬列伝 ---- */
+.leg-hd{display:flex;align-items:center;gap:14px}
+.leg-no{flex:0 0 44px;height:44px;border-radius:12px;background:var(--accent-soft);
+  color:var(--accent);font-weight:800;font-size:17px;display:flex;align-items:center;
+  justify-content:center;font-variant-numeric:tabular-nums}
+.leg-name{font-size:20px;font-weight:800;line-height:1.3}
+.leg-name a{color:inherit;text-decoration:none}
+.leg-name a:hover{color:var(--accent)}
+.leg-meta{font-size:12px;color:var(--muted)}
+.leg-body{margin:14px 0 0;font-size:14px;line-height:1.95;text-align:justify}
+.leg-wins{display:flex;flex-wrap:wrap;gap:5px;margin-top:12px}
+.leg-wins span{font-size:11.5px;padding:3px 9px;border-radius:8px;
+  background:var(--gold-soft);color:var(--gold-ink)}
+.leg-wins b{font-variant-numeric:tabular-nums;margin-right:4px;opacity:.75}
+
 /* ---- 地図 ---- */
 .maplay{display:grid;gap:16px;grid-template-columns:minmax(0,1fr)}
 @media(min-width:1000px){ .maplay.side{grid-template-columns:minmax(0,1.15fr) minmax(300px,.85fr)} }
@@ -300,6 +317,7 @@ svg.map{display:block;width:100%;height:auto;border-radius:12px;background:var(-
   <nav>
     <a href="#/summary" data-r="summary">年史</a>
     <a href="#/awards" data-r="awards">年度表彰</a>
+    <a href="#/legends" data-r="legends">名馬列伝</a>
     <a href="#/horses" data-r="horses">馬一覧</a>
     <a href="#/stallions" data-r="pedigree">血統</a>
     <a href="#/jockeys" data-r="jockeys">騎手</a>
@@ -622,6 +640,8 @@ const G = g => (g||'').replace(/[.．]/g,'');
 const isG1 = g => G(g)==='G1';
 const isJpn1 = g => G(g)==='JPNⅠ';
 const isGraded = g => /^(G[123]|JPN[ⅠⅡⅢ])$/.test(G(g));
+const isG2 = g => /^(G2|JPNⅡ)$/.test(G(g));
+const isG3 = g => /^(G3|JPNⅢ)$/.test(G(g));
 
 function agg(rs){
   const a={n:rs.length,w:0,p2:0,p3:0,prize:0,g1:0,jpn1:0,gr:0,plc:0,wins:[]};
@@ -2040,6 +2060,157 @@ function recordsBody(region){
   return s;
 }
 
+/* ============ 画面: 名馬列伝 ============ */
+// 所有馬だけが対象。他厩舎の馬は勝ち鞍しか分からないので列伝は書けない。
+const LEG={sort:'score',region:''};
+const MONTH=d=>+String(d).slice(5,7);
+const careerPts=a=>a.prize+a.g1*PT_G1+a.jpn1*PT_JPN1;
+
+// 列伝に載せる馬を選ぶ。称号・年度表彰・G1の勝ち数のどれかを満たせば載る
+function legendList(){
+  const out=[];
+  for(const h of DB.horses.values()){
+    const runs=h.runs||[]; if(!runs.length) continue;
+    const a=h.total||agg(runs);
+    const crowns=DB.crowns.byHorse.get(h.name)||[];
+    const awards=DB.awards.byHorse.get(h.name)||[];
+    const best=awards.filter(x=>x.cat==='最優秀馬');
+    const g1=a.g1+a.jpn1;
+    const why=[];
+    if(crowns.some(c=>c.c.pt>0)) why.push('crown');
+    if(best.length) why.push('champ');
+    if(g1>=3) why.push('g1');
+    if(!why.length) continue;
+    out.push({h,a,runs,crowns,awards,best,g1,score:careerPts(a),why});
+  }
+  out.sort((x,y)=>y.score-x.score);
+  return out;
+}
+
+// 事実を並べて短い列伝にする。欠けている情報は文ごと落とす
+function legendProse(e){
+  const {h,a,runs,crowns,awards,best}=e;
+  const S=[], sorted=[...runs].sort((p,q)=>p.date.localeCompare(q.date));
+  const wins=sorted.filter(r=>r.rank===1);
+  const g1w=wins.filter(r=>isG1(r.grade)||isJpn1(r.grade));
+  const bms=bmsOf(h);
+
+  S.push((h.birth?h.birth+'年生まれの':'')
+    +(h.color?h.color+'の':'')+(h.sex?h.sex+'馬':'競走馬')+'。'
+    +(h.sire?'父'+h.sire:'')+(h.dam?'、母'+h.dam:'')
+    +(bms?'（母父'+bms+'）':'')+(h.sire||h.dam?'。':''));
+
+  const d0=sorted[0];
+  if(d0) S.push(d0.year+'年'+MONTH(d0.date)+'月、'+shortPlace(d0.place)+'の'+d0.race+'でデビュー。'
+    +(d0.rank===1?'これを危なげなく勝ち上がった。'
+      :d0.rank?d0.rank+'着に敗れたが、ここから駆け上がっていく。':''));
+
+  S.push('通算'+a.n+'戦'+a.w+'勝。'
+    +(e.g1?'G1・JpnⅠを'+e.g1+'勝し、':'')+'獲得賞金は'+num(a.prize)+'。'
+    +(a.n===a.w&&a.n>=5?'一度も敗れることなくターフを去った。':''));
+
+  // 最大の勝ち鞍は賞金が最も高いG1
+  const top=g1w.slice().sort((p,q)=>q.prize-p.prize)[0];
+  if(top) S.push('最大の勝ち鞍は'+top.year+'年の'+top.race+'。'
+    +(top.pop?top.pop+'番人気で':'')+(top.jockey?top.jockey+'を鞍上に':'')
+    +shortPlace(top.place)+'の'+top.dist+'mを制した。');
+
+  // 最長連勝。全勝の馬は前の文と重なるので書かない
+  let run=0,bestRun=0;
+  for(const r of sorted){ if(r.rank===1){ run++; bestRun=Math.max(bestRun,run); } else run=0; }
+  if(bestRun>=4&&a.n!==a.w) S.push('最長'+bestRun+'連勝を記録している。');
+
+  // 同じ称号を複数年で獲っていればまとめる
+  const cm=new Map();
+  for(const c of crowns.filter(c=>c.c.pt>0)){
+    const n=crownName(c); if(!cm.has(n)) cm.set(n,new Set()); cm.get(n).add(c.year); }
+  for(const [n,ys] of cm)
+    S.push([...ys].sort().join('年と')+'年に'+n+'を成し遂げた。');
+
+  if(best.length){
+    const byReg=new Map();
+    for(const b of best){ if(!byReg.has(b.region)) byReg.set(b.region,[]); byReg.get(b.region).push(b.year); }
+    S.push([...byReg].map(([reg,ys])=>{
+      ys.sort((p,q)=>p-q);
+      return ys.length>2&&ys[ys.length-1]-ys[0]===ys.length-1
+        ? ys[0]+'年から'+ys.length+'年続けて'+reg+'を代表する馬に選ばれた'
+        : ys.join('・')+'年の'+reg+'を代表する馬に選ばれた';
+    }).join('。')+'。');
+  }
+  else {
+    const other=awards.filter(x=>x.cat!=='最優秀馬');
+    if(other.length) S.push(other[0].year+'年の'+other[0].region+'で'+other[0].cat+'に選出。');
+  }
+
+  // 立ちはだかった馬。タイム欄の勝ち馬名から拾う
+  const foe=new Map();
+  for(const r of sorted){ if(r.rank===1||!r.winner||r.winner===h.name) continue;
+    foe.set(r.winner,(foe.get(r.winner)||0)+1); }
+  const rival=[...foe.entries()].sort((p,q)=>q[1]-p[1])[0];
+  if(rival&&rival[1]>=3) S.push(rival[1]+'度先着を許した'+rival[0]+'とは、生涯のライバルだった。');
+
+  const kids=(h.children||[]).map(n=>DB.horses.get(n)).filter(Boolean);
+  if(h.status==='種牡馬'||h.status==='繁殖'){
+    const star=kids.filter(k=>k.total&&k.total.g1+k.total.jpn1>0)
+                   .sort((p,q)=>careerPts(q.total)-careerPts(p.total))[0];
+    S.push((h.retireYear&&h.retireYear!=='-'?h.retireYear+'年に現役を退き、':'')
+      +(h.status==='種牡馬'?'種牡馬':'繁殖牝馬')+'となった。'
+      +(kids.length?'産駒は'+kids.length+'頭。':'')
+      +(star?'代表産駒は'+star.name+'。':''));
+  } else if(h.retireYear&&h.retireYear!=='-') S.push(h.retireYear+'年に現役を退いた。');
+
+  return S.filter(Boolean);
+}
+
+function viewLegends(){
+  let list=legendList();
+  if(LEG.region) list=list.filter(e=>e.h.region===LEG.region);
+  if(LEG.sort==='year') list.sort((x,y)=>(+x.h.birth||0)-(+y.h.birth||0)||y.score-x.score);
+  else if(LEG.sort==='g1') list.sort((x,y)=>y.g1-x.g1||y.score-x.score);
+  else list.sort((x,y)=>y.score-x.score);
+
+  let s='<h1>名馬列伝</h1><div class="sub">称号を得た馬、年度を代表した馬、'
+    +'G1を3勝以上した馬を選び、記録から経歴を組み立てています。</div>'
+    +'<div class="filters">'
+    +'<select id="lgsort">'+[['score','通算スコア順'],['g1','G1勝ち数順'],['year','生年順']]
+      .map(([v,l])=>'<option value="'+v+'"'+(LEG.sort===v?' selected':'')+'>'+l+'</option>').join('')
+    +'</select><select id="lgregion"><option value="">地域すべて</option>'
+    +REGIONS.map(r=>'<option value="'+r+'"'+(LEG.region===r?' selected':'')+'>'+r+'</option>').join('')
+    +'</select></div>';
+
+  if(!list.length) return s+'<div class="card"><div class="mapempty">該当する馬がいません。</div></div>';
+
+  list.forEach((e,i)=>{
+    const {h,a}=e;
+    const titles=[...new Set(e.crowns.filter(c=>c.c.pt>0).map(c=>crownName(c)))]
+      .concat(e.best.map(b=>b.year+'年 '+b.region+'最優秀馬'));
+    s+='<div class="card leg"><div class="leg-hd">'
+      +'<div class="leg-no">'+(i+1)+'</div>'
+      +'<div><div class="leg-name">'+hlink(h.name)+'</div>'
+      +'<div class="leg-meta">'+[h.birth?h.birth+'年生':'',h.sex,h.region,h.trainer?h.trainer+' 厩舎':'']
+        .filter(Boolean).join('　')+'</div></div></div>'
+      +(titles.length?'<div class="crowns">'+titles.map(t=>'<span class="cr">'+esc(t)+'</span>').join('')+'</div>':'')
+      +'<div class="stats" style="margin-top:14px">'
+      +tile(a.n+'戦'+a.w+'勝','戦績')+tile(rate(a),'勝率')
+      +tile(e.g1,'G1・JpnⅠ')+tile(num(a.prize),'獲得賞金')+'</div>'
+      +'<p class="leg-body">'+legendProse(e).map(esc).join('')+'</p>';
+    const g1w=(h.runs||[]).filter(r=>r.rank===1&&(isG1(r.grade)||isJpn1(r.grade)))
+      .sort((p,q)=>p.date.localeCompare(q.date));
+    if(g1w.length) s+='<div class="leg-wins">'+g1w.map(r=>
+      '<span><b>'+r.year+'</b> '+esc(r.race)+'</span>').join('')+'</div>';
+    s+='</div>';
+  });
+  return s+'<div class="note">'+list.length+'頭を掲載しています。'
+    +'他厩舎の馬は勝ち鞍しか分からないため、対象は所有馬だけです。</div>';
+}
+
+function bindLegends(){
+  const on=(id,k)=>{ const e=document.getElementById(id);
+    if(e) e.onchange=ev=>{ LEG[k]=ev.target.value;
+      document.getElementById('app').innerHTML=viewLegends(); bindLegends(); }; };
+  on('lgsort','sort'); on('lgregion','region');
+}
+
 /* ============ 画面: 地図 ============ */
 // 下絵は自動生成の map-data.js。80KBほどあるので、地図を開いたときだけ読み込む。
 const MP={view:'jp',metric:'w',split:'surface'};
@@ -2052,12 +2223,13 @@ const MAP_METRICS={
 };
 const MAP_SPLITS={
   surface:{label:'内訳: 馬場別', keys:['芝','ダート'],
+           colors:['var(--s3)','var(--s2)'],
            of:r=>r.surface==='芝'?'芝':r.surface==='ダート'?'ダート':null},
-  grade:  {label:'内訳: 格別',   keys:['G1・JpnⅠ','重賞','その他'],
-           of:r=>isG1(r.grade)||isJpn1(r.grade)?'G1・JpnⅠ':isGraded(r.grade)?'重賞':'その他'},
+  grade:  {label:'内訳: 格別',   keys:['G1・JpnⅠ','G2・JpnⅡ','G3・JpnⅢ','その他'],
+           colors:['var(--g1)','var(--g2)','var(--g3)','var(--gx)'],
+           of:r=>isG1(r.grade)||isJpn1(r.grade)?'G1・JpnⅠ'
+               :isG2(r.grade)?'G2・JpnⅡ':isG3(r.grade)?'G3・JpnⅢ':'その他'},
 };
-// 検証済みの系列色をそのまま使う（芝→緑・ダート→橙）
-const MAP_COLOR=['var(--s3)','var(--s2)','var(--s1)'];
 const mapFmt=(met,v)=>num(Math.round(v))+met.unit;
 
 // map-data.js を作り直したら必ず上げること。ブラウザが古い下絵を握り続けるのを防ぐ
@@ -2164,9 +2336,9 @@ function mapSvg(d){
       const sh=val/it.total*it.h, yTop=cy-sh;
       const pad=i===last?0:Math.min(GAP,sh*0.4), hh=Math.max(1,sh-pad);
       segs+= i===last
-        ? '<path class="seg" d="'+segPath(x,yTop,BW,hh,3)+'" fill="'+MAP_COLOR[i]+'"/>'
+        ? '<path class="seg" d="'+segPath(x,yTop,BW,hh,3)+'" fill="'+sp.colors[i]+'"/>'
         : '<rect class="seg" x="'+n1(x)+'" y="'+n1(yTop+pad)+'" width="'+BW+'" height="'+n1(hh)+'"'
-          +' fill="'+MAP_COLOR[i]+'"/>';
+          +' fill="'+sp.colors[i]+'"/>';
       cy=yTop;
     }
     const breakdown=sp.keys.map((k,i)=>k+' '+mapFmt(met,it.segs[i])).join(' ／ ');
@@ -2197,7 +2369,7 @@ function mapSvg(d){
   }
 
   const legend='<div class="maplegend">'+sp.keys.map((k,i)=>
-    '<span><i style="background:'+MAP_COLOR[i]+'"></i>'+esc(k)+'</span>').join('')
+    '<span><i style="background:'+sp.colors[i]+'"></i>'+esc(k)+'</span>').join('')
     +'<span style="margin-left:auto">棒の高さ＝'+esc(met.label)+'</span></div>';
 
   return '<div class="mapfig"><svg class="map" viewBox="0 0 '+v.w+' '+v.h+'" role="img"'
@@ -2283,6 +2455,7 @@ function render(){
   else if(hash.startsWith('#/venue/')){ app.innerHTML=viewVenue(decodeURIComponent(hash.slice(8))); route='courses'; }
   else if(hash.startsWith('#/race/')){ app.innerHTML=viewRace(decodeURIComponent(hash.slice(7))); route='courses'; }
   else if(hash.startsWith('#/courses')){ app.innerHTML=viewCourses(); bindCourses(); route='courses'; }
+  else if(hash.startsWith('#/legends')){ app.innerHTML=viewLegends(); bindLegends(); route='legends'; }
   else if(hash.startsWith('#/map')){ app.innerHTML=viewMap(); bindMap(); route='map'; }
   else if(hash.startsWith('#/records')){ app.innerHTML=viewRecords(); bindRecords(); route='records'; }
   else if(hash.startsWith('#/summary')){ app.innerHTML=viewSummary(); bindSummary(); route='summary'; }
