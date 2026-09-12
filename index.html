@@ -2119,7 +2119,13 @@ const IN={tab:'entry',cart:[],pending:null,cands:[],init:null,busy:false,
           meet:{year:'',month:'',week:''},
           race:{place:'',raceName:'',raceNo:'',grade:'G1',dist:'',
                 trackType:'芝',trackCond:'良',winPrize:'',known:null},
-          horse:'',jockey:''};
+          horse:'',jockey:'',
+          opts:null,
+          nh:{name:'',birth:'',color:'鹿毛',sex:'牡',sire:'',dam:'',trainer:'',base:'栗東'},
+          nhForce:false};
+const IN_COLORS=['鹿毛','黒鹿毛','青鹿毛','青毛','芦毛','栗毛','栃栗毛','白毛'];
+const IN_SEXES=['牡','牝','セン'];
+const IN_BASES=['栗東','美浦','アメリカ','イギリス','フランス','アイルランド'];
 const IN_GRADES=['G1','G2','G3','JPNⅠ','JPNⅡ','JPNⅢ','L','OP',
                  '3勝クラス','2勝クラス','1勝クラス','未勝利','新馬'];
 const TIME_RE=/^(\d+\.\d{2}\.\d|\d{1,2}\.\d)$/;
@@ -2147,6 +2153,7 @@ function viewInput(){
   return s+'<div class="tabs">'
     +'<button class="tabbtn'+(IN.tab==='entry'?' on':'')+'" data-it="entry">① 出走登録</button>'
     +'<button class="tabbtn'+(IN.tab==='result'?' on':'')+'" data-it="result">② 結果入力</button>'
+    +'<button class="tabbtn'+(IN.tab==='horse'?' on':'')+'" data-it="horse">③ 新馬登録</button>'
     +'</div><div id="inbody"><div class="card"><div class="mapempty">読み込んでいます…</div></div></div>'
     +'<div id="inmsg" class="inmsg"></div>'
     +'<div class="note">合言葉を入れ直したいときは'
@@ -2259,6 +2266,46 @@ function inResult(){
   return s;
 }
 
+/* ---- ③ 新馬登録 ---- */
+// 父・母・調教師は既に使われている名前を候補に出す。
+// Googleフォームではできなかった部分で、血統がつながらない事故を防ぐのが狙い。
+function inHorse(){
+  const h=IN.nh, o=IN.opts||{sires:[],dams:[],trainers:[],bases:[],colors:[]};
+  const list=(id,arr)=>'<datalist id="'+id+'">'
+    +arr.map(x=>'<option value="'+esc(x)+'">').join('')+'</datalist>';
+  const colors=[...new Set(IN_COLORS.concat(o.colors||[]))];
+  const bases =[...new Set(IN_BASES.concat(o.bases||[]))];
+
+  let s='<div class="card"><h2>新しい馬を登録する</h2><div class="inrow">'
+    +fld('h_name','馬名','type="text" value="'+esc(h.name)+'"')
+    +fld('h_birth','生年','type="number" inputmode="numeric" value="'+esc(h.birth)+'"')
+    +'</div><div class="inrow">'
+    +fld('h_color','毛色','',colors.map(c=>opt(c,h.color)).join(''))
+    +fld('h_sex','性別','',IN_SEXES.map(x=>opt(x,h.sex)).join(''))
+    +fld('h_base','所属','',bases.map(b=>opt(b,h.base)).join(''))
+    +'</div><div class="inrow">'
+    +fld('h_sire','父 <span>入力すると候補が出ます</span>',
+        'type="text" list="sire-list" value="'+esc(h.sire)+'"')
+    +fld('h_dam','母 <span>同上</span>','type="text" list="dam-list" value="'+esc(h.dam)+'"')
+    +'</div><div class="inrow">'
+    +fld('h_trainer','調教師','type="text" list="trainer-list" value="'+esc(h.trainer)+'"')
+    +'</div>'
+    +list('sire-list',o.sires)+list('dam-list',o.dams)+list('trainer-list',o.trainers)
+    +'<div class="inrow" style="margin-top:6px"><div class="inf">'
+    +'<button class="inbtn" id="h_save">'+(IN.nhForce?'同名でも登録する':'登録する')+'</button></div>'
+    +'<div class="inf" style="flex:0 0 auto">'
+    +'<button class="inbtn sub" id="h_clear">入力を消す</button></div></div>'
+    +'<div class="note">IDは自動で振られます。'
+    +'父・母は既に登録のある名前から選ぶと、血統がつながります。</div></div>';
+
+  // 既に同じ名前があれば、押す前に知らせる
+  const known=h.name.trim()&&DB&&DB.horses.has(nm(h.name.trim()));
+  if(known) s+='<div class="card"><div class="note" style="color:var(--jp)">'
+    +'「'+esc(h.name.trim())+'」は既に登録されているようです。'
+    +'別の馬なら、そのまま登録できます。</div></div>';
+  return s;
+}
+
 function inPrizePreview(ri,hi){
   const R=IN.pending.races[ri], id=ri+'_'+hi;
   const rank=Number(document.getElementById('k_'+id).value);
@@ -2274,7 +2321,7 @@ function inPrizePreview(ri,hi){
 
 function inRender(){
   const b=document.getElementById('inbody'); if(!b) return;
-  b.innerHTML=IN.tab==='entry'?inEntry():inResult();
+  b.innerHTML=IN.tab==='entry'?inEntry():IN.tab==='result'?inResult():inHorse();
   inBindBody();
 }
 
@@ -2338,6 +2385,41 @@ function inBindBody(){
       busy(e.target,'登録中…',()=>api('registerEntries',
         {payload:{year:m.year,month:m.month,week:m.week,entries:IN.cart}}).then(j=>{
           IN.cart=[]; IN.pending=null; inMsg(j.message,true); inRender(); }));
+    });
+  } else if(IN.tab==='horse'){
+    [['h_name','name'],['h_birth','birth'],['h_color','color'],['h_sex','sex'],
+     ['h_base','base'],['h_sire','sire'],['h_dam','dam'],['h_trainer','trainer']]
+      .forEach(([id,k])=>{ const el=$(id); if(el)
+        el.addEventListener(el.tagName==='SELECT'?'change':'input',ev=>{
+          IN.nh[k]=ev.target.value;
+          if(k==='name'){ IN.nhForce=false; }
+        }); });
+    // 馬名から手が離れたときだけ、同名の知らせを出し直す
+    on('h_name','blur',()=>inRender());
+    on('h_clear','click',()=>{
+      IN.nh={name:'',birth:IN.nh.birth,color:'鹿毛',sex:'牡',sire:'',dam:'',
+             trainer:IN.nh.trainer,base:IN.nh.base};
+      IN.nhForce=false; inMsg(''); inRender();
+    });
+    on('h_save','click',e=>{
+      const h=IN.nh;
+      if(!h.name.trim()){ inMsg('⚠️ 馬名を入れてください',false); return; }
+      if(!h.birth){ inMsg('⚠️ 生年を入れてください',false); return; }
+      busy(e.target,'登録中…',()=>api('registerHorse',
+        {horse:Object.assign({},h,{force:IN.nhForce})}).then(j=>{
+          inMsg(j.data.message,true);
+          IN.nh={name:'',birth:h.birth,color:'鹿毛',sex:'牡',sire:'',dam:'',
+                 trainer:h.trainer,base:h.base};
+          IN.nhForce=false;
+          IN.init=null; IN.opts=null;          // 馬と候補の一覧を取り直す
+          return api('init').then(r=>{ IN.init=r.data; })
+            .then(()=>api('horseOptions')).then(r=>{ IN.opts=r.data; inRender(); });
+        }).catch(err=>{
+          // 同名があるとGASが断ってくる。もう一度押せば登録できるようにする
+          if(/既に登録されています/.test(err.message)) IN.nhForce=true;
+          inMsg('⚠️ '+err.message,false); inRender();
+          throw err;
+        }));
     });
   } else {
     on('r_load','click',e=>busy(e.target,'読み込み中…',()=>api('getPending').then(j=>{
@@ -2406,6 +2488,8 @@ function bindInput(){
   start.then(()=>{
     if(IN.tab==='result'&&!IN.pending)
       return api('getPending').then(j=>{ IN.pending=j.data; });
+    if(IN.tab==='horse'&&!IN.opts)
+      return api('horseOptions').then(j=>{ IN.opts=j.data; });
   }).then(inRender)
     .catch(err=>{ const b=$('inbody');
       if(b) b.innerHTML='<div class="card"><div class="mapempty">つながりませんでした。<br>'
