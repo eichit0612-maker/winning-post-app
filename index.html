@@ -9,6 +9,7 @@
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect width='32' height='32' rx='5' fill='%230f7a4c'/><path d='M8 27V15a8 8 0 0 1 16 0v12' fill='none' stroke='%23fff' stroke-width='5' stroke-linecap='round'/></svg>">
 <style>
 :root{
+  color-scheme:light;
   --bg:#f3f8f5; --panel:#fff; --panel2:#f7fbf9; --line:#e0ebe4;
   --ink:#16261e; --muted:#4f6157;
   --accent:#0f7a4c; --accent-soft:#ddf3e8;
@@ -23,6 +24,7 @@
   --shoe:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Cpath d='M7 28V15a9 9 0 0 1 18 0v13' fill='none' stroke='%23000' stroke-width='6' stroke-linecap='round'/%3E%3C/svg%3E");
 }
 :root[data-theme="dark"]{
+  color-scheme:dark;
   /* 真っ黒に寄せず、緑を含んだ明るめの地色にしている */
   --bg:#1a231f; --panel:#232e28; --panel2:#2c3831; --line:#3a4740;
   --ink:#edf5f0; --muted:#a9bcb0;
@@ -242,6 +244,11 @@ text.dlabel{fill:var(--ink);font-size:12.5px;font-weight:700}
   background:var(--panel);color:var(--ink);font-size:14px;font-family:inherit}
 .inf input:focus,.inf select:focus{outline:none;border-color:var(--accent);
   box-shadow:0 0 0 3px var(--accent-soft)}
+.inf select optgroup{font-weight:700;color:var(--muted);font-style:normal}
+.inf select option{font-weight:400}
+.inf select option.o-m{color:var(--g1)}
+.inf select option.o-f{color:var(--jp)}
+.inf select option.o-g{color:var(--muted)}
 .inbtn{font-family:inherit;font-size:14px;font-weight:700;padding:9px 18px;border-radius:4px;
   border:1px solid var(--accent);background:var(--accent);color:var(--on-bright);cursor:pointer}
 .inbtn.sub{background:var(--panel);color:var(--muted);border-color:var(--line)}
@@ -2239,6 +2246,37 @@ const fld=(id,label,attrs,opts)=>'<div class="inf"><label for="'+id+'">'+label+'
 const opt=(v,cur,label)=>'<option value="'+esc(v)+'"'+(String(cur)===String(v)?' selected':'')+'>'
   +esc(label===undefined?v:label)+'</option>';
 
+/* 現役馬のプルダウン。年齢ごとに区切り、性別で文字色を変える。
+   生年・性別・所属はサイトが読み込み済みの現役馬シートから引くので、APIは増やさない */
+const SEX_CLASS={'牡':'o-m','牝':'o-f','セン':'o-g'};
+function horseOptions(names,cur,year){
+  const y=+year || (DB&&DB.years.length?Math.max.apply(null,DB.years):0);
+  const groups=new Map();
+  for(const n of names){
+    const h=DB?DB.horses.get(nm(String(n).trim())):null;
+    const age=(y&&h&&h.birth)?y-(+h.birth):null;
+    const k=(age===null||isNaN(age)||age<0||age>40)?'?':age;
+    if(!groups.has(k)) groups.set(k,[]);
+    groups.get(k).push({name:n, sex:(h&&h.sex)||'', base:(h&&h.base)||''});
+  }
+  const keys=[...groups.keys()].sort((a,b)=> a==='?'?1 : b==='?'?-1 : a-b);
+  let s='<option value="">選んでください</option>';
+  for(const k of keys){
+    const list=groups.get(k).sort((a,b)=>a.name.localeCompare(b.name,'ja'));
+    const head=(k==='?'?'生年不明':k+'歳')+'（'+list.length+'頭）';
+    s+='<optgroup label="'+esc('──── '+head+' ────')+'">'
+      +list.map(h=>{
+        const sub=[h.sex,h.base].filter(Boolean).join('・');
+        return '<option value="'+esc(h.name)+'"'
+          +(String(cur)===String(h.name)?' selected':'')
+          +' class="'+(SEX_CLASS[h.sex]||'o-g')+'">'
+          +esc(h.name+(sub?'　'+sub:''))+'</option>';
+      }).join('')
+      +'</optgroup>';
+  }
+  return s;
+}
+
 function viewInput(){
   let s='<h1>入力</h1><div class="sub">出走登録と結果入力をここから行えます。'
     +'スプレッドシートを開かなくても、スマホからでも使えます。</div>';
@@ -2302,8 +2340,8 @@ function inEntry(){
     +'</datalist></div>';
 
   s+='<div class="card"><h2>3. 出走する馬</h2><div class="inrow">'
-    +fld('e_horse','馬','','<option value="">選んでください</option>'
-        +horses.map(h=>opt(h,IN.horse)).join(''))
+    +fld('e_horse','馬 <span>年齢で区切り、牡は青・牝は赤</span>','',
+        horseOptions(horses,IN.horse,m.year))
     +fld('e_jockey','騎手 <span>空欄なら前走から</span>','type="text" value="'+esc(IN.jockey)+'"')
     +'<div class="inf" style="flex:0 0 auto"><button class="inbtn" id="e_add">追加</button></div>'
     +'</div></div>';
