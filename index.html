@@ -265,6 +265,8 @@ text.dlabel{fill:var(--ink);font-size:12.5px;font-weight:700}
 .hbox .hn{font-weight:700;margin-bottom:6px}
 .hbox .hn em{font-style:normal;font-weight:400;color:var(--muted);font-size:11.5px}
 .pzhint{font-size:11.5px;color:var(--accent);font-weight:700;margin-top:4px;min-height:14px}
+.inf input.locked{background:var(--panel2);color:var(--muted);font-weight:700}
+.inf label span#rwn_0,.inf label span[id^="rwn_"]{font-weight:400;opacity:.75;color:var(--accent)}
 
 /* ---- 名馬列伝 ---- */
 .leg-hd{display:flex;align-items:center;gap:14px}
@@ -2362,6 +2364,29 @@ function inEntry(){
 }
 
 /* ---- ② 結果入力 ---- */
+// タイムと勝ち馬はレースに1つの値。既に入っている行があればそれを初期値にする
+const raceTime  =R=>(R.horses.find(h=>h.time)||{}).time||'';
+const raceWinner=R=>{
+  const w=R.horses.find(h=>String(h.rank)==='1');
+  return w ? w.name : ((R.horses.find(h=>h.winner)||{}).winner||'');
+};
+
+/* 着順に1が入ったら勝ち馬をその馬にして、触れないようにする */
+function syncWinner(ri){
+  const R=IN.pending.races[ri], w=document.getElementById('rw_'+ri);
+  if(!w) return;
+  const mine=R.horses.map((H,hi)=>({H:H,v:document.getElementById('k_'+ri+'_'+hi)}))
+                     .filter(x=>x.v&&Number(x.v.value)===1);
+  const note=document.getElementById('rwn_'+ri);
+  if(mine.length===1){
+    w.value=mine[0].H.name; w.readOnly=true; w.classList.add('locked');
+    if(note) note.textContent='自分の馬が勝ちました';
+  }else{
+    w.readOnly=false; w.classList.remove('locked');
+    if(note) note.textContent=mine.length>1?'⚠️ 1着が2頭います':'';
+  }
+}
+
 function inResult(){
   const races=(IN.pending&&IN.pending.races)||[];
   let s='<div class="card"><div class="inrow">'
@@ -2375,8 +2400,13 @@ function inResult(){
     s+='<div class="rcard"><div class="rh">'+esc(R.raceName)+'</div>'
       +'<div class="rs">'+esc(R.date+' '+shortPlace(R.place)+' / '+R.grade+' / '+R.surf+R.dist+'m')
       +(R.winPrize?' / 1着 '+num(R.winPrize):' / <span style="color:var(--jp)">1着賞金なし</span>')+'</div>'
-      +'<div class="inrow">'+fld('c_'+ri,'馬場状態（このレース全体）','',
-          ['良','稍重','重','不良'].map(c=>opt(c,R.cond)).join(''))+'</div>';
+      // タイムと勝ち馬はレースに1つだけ。同じレースに複数出したときの二度手間をなくす
+      +'<div class="inrow">'+fld('c_'+ri,'馬場状態','',
+          ['良','稍重','重','不良'].map(c=>opt(c,R.cond)).join(''))
+      +fld('rt_'+ri,'勝ちタイム','type="text" placeholder="1.34.5" value="'+esc(raceTime(R))+'"')
+      +'<div class="inf"><label for="rw_'+ri+'">勝ち馬 <span id="rwn_'+ri+'"></span></label>'
+      +'<input id="rw_'+ri+'" type="text" value="'+esc(raceWinner(R))+'"></div>'
+      +'</div>';
     R.horses.forEach((H,hi)=>{
       const id=ri+'_'+hi;
       s+='<div class="hbox"><div class="hn">'+esc(H.name)
@@ -2384,11 +2414,6 @@ function inResult(){
         +fld('p_'+id,'人気','type="number" inputmode="numeric" value="'+esc(H.popularity)+'"')
         +fld('k_'+id,'着順','type="number" inputmode="numeric" value="'+esc(H.rank)
             +'" data-ri="'+ri+'" data-hi="'+hi+'"')
-        +'</div><div class="inrow">'
-        +fld('t_'+id,'タイム','type="text" placeholder="1.34.5" value="'+esc(H.time)+'"')
-        +'<div class="inf" id="wbox_'+id+'"><label for="w_'+id+'">勝ち馬</label>'
-        +'<input id="w_'+id+'" type="text" value="'+esc(H.winner)+'"></div>'
-        +'</div><div class="inrow">'
         +fld('z_'+id,'賞金 <span>空欄で自動</span>','type="number" inputmode="numeric" value="'
             +esc(H.prize)+'"')
         +'</div><div class="pzhint" id="pz_'+id+'"></div></div>';
@@ -2397,7 +2422,9 @@ function inResult(){
   });
   s+='<div class="inrow"><div class="inf">'
     +'<button class="inbtn" id="r_save">結果を保存する</button></div></div>'
-    +'<div class="note">賞金を空欄にすると、1着賞金と着順から自動で計算します。</div></div>';
+    +'<div class="note">タイムと勝ち馬はレースに1つだけ入れれば、出走した全頭に入ります。'
+    +'自分の馬に1着を付けると、勝ち馬はその馬になります。<br>'
+    +'賞金を空欄にすると、1着賞金と着順から自動で計算します。</div></div>';
 
   s+='<div class="card"><h2>本登録</h2>'
     +'<div class="note" style="margin-bottom:12px">仮登録の内容を「登録済」シートへ移します。'
@@ -2450,8 +2477,6 @@ function inHorse(){
 function inPrizePreview(ri,hi){
   const R=IN.pending.races[ri], id=ri+'_'+hi;
   const rank=Number(document.getElementById('k_'+id).value);
-  const wb=document.getElementById('wbox_'+id);
-  if(wb) wb.hidden=(rank===1);
   const hint=document.getElementById('pz_'+id); if(!hint) return;
   const z=document.getElementById('z_'+id).value.trim();
   if(z||!rank||!R.winPrize){ hint.textContent=''; return; }
@@ -2567,19 +2592,24 @@ function inBindBody(){
       IN.pending=j.data; inMsg('',true); inRender(); })));
     document.querySelectorAll('[id^="k_"],[id^="z_"]').forEach(el=>{
       const k=el.id.slice(2).split('_');
-      el.addEventListener('input',()=>inPrizePreview(+k[0],+k[1])); });
-    ((IN.pending&&IN.pending.races)||[]).forEach((R,ri)=>
-      R.horses.forEach((H,hi)=>inPrizePreview(ri,hi)));
+      el.addEventListener('input',()=>{ inPrizePreview(+k[0],+k[1]); syncWinner(+k[0]); }); });
+    ((IN.pending&&IN.pending.races)||[]).forEach((R,ri)=>{
+      R.horses.forEach((H,hi)=>inPrizePreview(ri,hi)); syncWinner(ri); });
     on('r_save','click',e=>{
       const items=[]; let bad='';
       IN.pending.races.forEach((R,ri)=>{
         const cond=$('c_'+ri).value;
+        const t=$('rt_'+ri).value.trim(), win=$('rw_'+ri).value.trim();
+        if(t&&!TIME_RE.test(t))
+          bad=R.raceName+' のタイム「'+t+'」は 1.34.5 か 58.8 の形で入れてください';
+        if(R.horses.filter((H,hi)=>Number($('k_'+ri+'_'+hi).value)===1).length>1)
+          bad=R.raceName+' に1着が2頭います。別のレースが混ざっていないか確かめてください';
         R.horses.forEach((H,hi)=>{
-          const id=ri+'_'+hi, t=$('t_'+id).value.trim();
-          if(t&&!TIME_RE.test(t)) bad=H.name+' のタイム「'+t+'」は 1.34.5 か 58.8 の形で入れてください';
+          const id=ri+'_'+hi, rank=$('k_'+id).value.trim();
+          // タイムと勝ち馬はレース共通の値をそのまま配る。1着の馬は勝ち馬を付けない
           items.push({row:H.row,name:H.name,cond:cond,
-            popularity:$('p_'+id).value.trim(), rank:$('k_'+id).value.trim(), time:t,
-            winner:(Number($('k_'+id).value)===1?'':$('w_'+id).value.trim()),
+            popularity:$('p_'+id).value.trim(), rank:rank, time:t,
+            winner:(Number(rank)===1?'':win),
             prize:$('z_'+id).value.trim()});
         });
       });
