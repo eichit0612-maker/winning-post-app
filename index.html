@@ -2364,6 +2364,20 @@ function inEntry(){
 }
 
 /* ---- ② 結果入力 ---- */
+// 「2歳新馬」のような汎用名は、同じ日・同じ競馬場で何本も組まれる別々のレース。
+// GASは日付・場所・レース名でまとめて返すので、ここで1頭ずつのカードに分け直す。
+const GENERIC_RACE=/^[0-9０-９]+歳(以上)?(新馬|未勝利|[0-9０-９]+勝クラス)$/;
+function splitPending(data){
+  if(!data||!data.races) return data;
+  const races=[];
+  for(const R of data.races){
+    if(R.horses.length>1 && GENERIC_RACE.test(String(R.raceName||'').trim()))
+      R.horses.forEach(h=>races.push(Object.assign({},R,{horses:[h],split:true})));
+    else races.push(R);
+  }
+  return Object.assign({},data,{races:races});
+}
+
 // タイムと勝ち馬はレースに1つの値。既に入っている行があればそれを初期値にする
 const raceTime  =R=>(R.horses.find(h=>h.time)||{}).time||'';
 const raceWinner=R=>{
@@ -2399,7 +2413,8 @@ function inResult(){
   races.forEach((R,ri)=>{
     s+='<div class="rcard"><div class="rh">'+esc(R.raceName)+'</div>'
       +'<div class="rs">'+esc(R.date+' '+shortPlace(R.place)+' / '+R.grade+' / '+R.surf+R.dist+'m')
-      +(R.winPrize?' / 1着 '+num(R.winPrize):' / <span style="color:var(--jp)">1着賞金なし</span>')+'</div>'
+      +(R.winPrize?' / 1着 '+num(R.winPrize):' / <span style="color:var(--jp)">1着賞金なし</span>')
+      +(R.split?' <b style="color:var(--accent)">・同名の別レースとして分けています</b>':'')+'</div>'
       // タイムと勝ち馬はレースに1つだけ。同じレースに複数出したときの二度手間をなくす
       +'<div class="inrow">'+fld('c_'+ri,'馬場状態','',
           ['良','稍重','重','不良'].map(c=>opt(c,R.cond)).join(''))
@@ -2424,6 +2439,8 @@ function inResult(){
     +'<button class="inbtn" id="r_save">結果を保存する</button></div></div>'
     +'<div class="note">タイムと勝ち馬はレースに1つだけ入れれば、出走した全頭に入ります。'
     +'自分の馬に1着を付けると、勝ち馬はその馬になります。<br>'
+    +'「2歳新馬」のように同じ名前で何本も組まれるレースは、1頭ずつ別のカードにしています。'
+    +'本当に同じレースに複数出した場合だけ、タイムと勝ち馬をそれぞれに入れてください。<br>'
     +'賞金を空欄にすると、1着賞金と着順から自動で計算します。</div></div>';
 
   s+='<div class="card"><h2>本登録</h2>'
@@ -2589,7 +2606,7 @@ function inBindBody(){
     });
   } else {
     on('r_load','click',e=>busy(e.target,'読み込み中…',()=>api('getPending').then(j=>{
-      IN.pending=j.data; inMsg('',true); inRender(); })));
+      IN.pending=splitPending(j.data); inMsg('',true); inRender(); })));
     document.querySelectorAll('[id^="k_"],[id^="z_"]').forEach(el=>{
       const k=el.id.slice(2).split('_');
       el.addEventListener('input',()=>{ inPrizePreview(+k[0],+k[1]); syncWinner(+k[0]); }); });
@@ -2616,7 +2633,7 @@ function inBindBody(){
       if(bad){ inMsg('⚠️ '+bad,false); return; }
       busy(e.target,'保存中…',()=>api('saveResults',{items:items}).then(j=>{
         inMsg(j.message,true);
-        return api('getPending').then(p=>{ IN.pending=p.data; inRender(); });
+        return api('getPending').then(p=>{ IN.pending=splitPending(p.data); inRender(); });
       }));
     });
     on('r_commit','click',e=>{
@@ -2658,7 +2675,7 @@ function bindInput(){
   });
   start.then(()=>{
     if(IN.tab==='result'&&!IN.pending)
-      return api('getPending').then(j=>{ IN.pending=j.data; });
+      return api('getPending').then(j=>{ IN.pending=splitPending(j.data); });
     if(IN.tab==='horse'&&!IN.opts)
       return api('horseOptions').then(j=>{ IN.opts=j.data; });
   }).then(inRender)
