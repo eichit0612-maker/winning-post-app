@@ -1171,7 +1171,14 @@ function viewHorse(name){
 }
 
 /* ============ 画面: 馬一覧 ============ */
-let LF={q:'',status:'',region:'',sort:'birth'};
+// 並べ替えの向き。項目ごとに自然な向きが違うので、既定をそれぞれ持たせる
+const SORT_DIR={
+  birth:{def:'asc', asc:'年上から', desc:'年下から'},
+  prize:{def:'desc',asc:'少ない順', desc:'多い順'},
+  g1:   {def:'desc',asc:'少ない順', desc:'多い順'},
+  name: {def:'asc', asc:'あ→わ',   desc:'わ→あ'},
+};
+let LF={q:'',status:'',region:'',sort:'birth',dir:SORT_DIR.birth.def};
 function viewHorses(){
   const all=[...DB.horses.values()];
   const gens=[...new Set(all.map(h=>h.birth).filter(Boolean))].sort();
@@ -1181,6 +1188,7 @@ function viewHorses(){
    +sel('lstatus',LF.status,'すべての状態',['現役','引退','繁殖','種牡馬'])
    +sel('lregion',LF.region,'すべての地域',REGIONS)
    +sel('lsort',LF.sort,null,[['birth','生年順'],['prize','獲得賞金順'],['g1','G1勝ち数順'],['name','馬名順']])
+   +sel('ldir',LF.dir,null,[['asc',SORT_DIR[LF.sort].asc],['desc',SORT_DIR[LF.sort].desc]])
    +'</div><div class="grid" id="hgrid">'+cards()+'</div>';
   return h;
 
@@ -1195,10 +1203,16 @@ function viewHorses(){
       (!LF.status||x.status===LF.status) &&
       (!LF.region||x.region===LF.region) &&
       (!LF.q||[x.name,x.sire,x.dam].some(v=>v&&v.includes(LF.q))));
-    const key={ birth:x=>[-(+x.birth||0),x.name], name:x=>[x.name],
-                prize:x=>[-(x.total?x.total.prize:0)], g1:x=>[-((x.total?x.total.g1+x.total.jpn1:0))] }[LF.sort];
-    list.sort((a,b)=>{ const A=key(a),B=key(b);
-      for(let i=0;i<A.length;i++){ if(A[i]<B[i]) return -1; if(A[i]>B[i]) return 1; } return 0; });
+    // 主となる値だけを向きで反転させる。同じ値のときは馬名順で安定させる
+    const val={ birth:x=>+x.birth||0, name:x=>x.name,
+                prize:x=>(x.total?x.total.prize:0),
+                g1:x=>(x.total?x.total.g1+x.total.jpn1:0) }[LF.sort];
+    const d=LF.dir==='desc'?-1:1;
+    list.sort((a,b)=>{
+      const A=val(a),B=val(b);
+      if(A<B) return -d; if(A>B) return d;
+      return a.name.localeCompare(b.name,'ja');
+    });
     if(!list.length) return '<div class="none">該当する馬がいません。</div>';
     return list.map(x=>'<a class="hcard" href="#/horse/'+encodeURIComponent(x.name)+'">'
       +'<div class="n">'+esc(x.name)+'</div>'
@@ -1217,7 +1231,10 @@ function bindHorses(){
     .split('<div class="grid" id="hgrid">')[1].replace(/<\/div>$/,''); };
   document.getElementById('lstatus').onchange=e=>{ LF.status=e.target.value; re(); };
   document.getElementById('lregion').onchange=e=>{ LF.region=e.target.value; re(); };
-  document.getElementById('lsort').onchange=e=>{ LF.sort=e.target.value; re(); };
+  // 項目を変えたら、その項目にとって自然な向きに戻す
+  document.getElementById('lsort').onchange=e=>{
+    LF.sort=e.target.value; LF.dir=SORT_DIR[LF.sort].def; re(); };
+  document.getElementById('ldir').onchange=e=>{ LF.dir=e.target.value; re(); };
 }
 
 /* ============ 画面: 種牡馬成績・繁殖牝馬成績 ============ */
@@ -2485,7 +2502,8 @@ function inResult(){
 
 /* ---- ④ 去就（引退判定と繁殖引退） ---- */
 // 一覧はサイトが読み込み済みのシートから作る。APIは書き込みのときだけ使う
-const FATE_DEST=['種牡馬入り','繁殖入り','引退（乗馬・功労）','引退'];
+// 乗馬・功労はその後の去就が追えないので、まとめて「引退」にする
+const FATE_DEST=['種牡馬入り','繁殖入り','引退'];
 const defaultDest=sex=> sex==='牡' ? '種牡馬入り' : sex==='牝' ? '繁殖入り' : '引退';
 const fateYear=()=> DB&&DB.years.length ? Math.max.apply(null,DB.years) : 0;
 
@@ -2519,7 +2537,7 @@ function fateBreed(region){
     out.push({h, kind:h.status==='種牡馬'?'種牡馬':'繁殖牝馬',
       age:h.birth?y-(+h.birth):null, kids:(h.children||[]).length});
   }
-  return out.sort((a,b)=>(b.age||0)-(a.age||0)||a.kids-b.kids);
+  return out.sort((a,b)=>a.h.name.localeCompare(b.h.name,'ja'));
 }
 const FATE_FILTERS=[['all','すべて',()=>true],
   ['old','4歳以上',e=>e.age>=4],
@@ -2646,7 +2664,7 @@ function inFate(){
     +'>まとめて登録する</button>'
     +'<button class="inbtn sub" id="fb_clear">選択を解除</button></div>'
     +'<div class="inmsg" id="fb_msg"></div>'
-    +'<div class="note">● は14歳以上の馬です。<br>'
+    +'<div class="note">名前順に並べています。● は14歳以上の馬です。<br>'
     +'繁殖引退年には登録した年が入ります。シートのH列のチェックボックスは使わなくて構いません。</div></div>';
   return s;
 }
