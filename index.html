@@ -2258,7 +2258,8 @@ const IN={tab:'entry',cart:[],pending:null,cands:[],init:null,busy:false,
           opts:null,
           nh:{name:'',birth:'',color:'鹿毛',sex:'牡',sire:'',dam:'',trainer:'',base:'栗東'},
           nhForce:false, nhCart:[],
-          fate:{filter:'all', sel:{}, dest:{}, bfilter:'all', bsel:{}}};
+          fate:{filter:'all', sel:{}, dest:{}, year:'',
+                bfilter:'all', bsel:{}, byear:''}};
 const IN_COLORS=['鹿毛','黒鹿毛','青鹿毛','青毛','芦毛','栗毛','栃栗毛','白毛'];
 const IN_SEXES=['牡','牝','セン'];
 const IN_BASES=['栗東','美浦','アメリカ','イギリス','フランス','アイルランド'];
@@ -2529,6 +2530,9 @@ function inFate(){
   let s='<h1 class="ttl2">④ 去就</h1><div class="sub">現役馬の引退判定と、種牡馬・繁殖牝馬の引退をここで行います。</div>';
 
   s+='<div class="card"><h2>現役馬の引退判定</h2>'
+    +'<div class="inrow">'+fld('fa_year','現役引退年 <span>移した馬に入ります</span>',
+        'type="number" inputmode="numeric" value="'+esc(IN.fate.year||fateYear())+'"')
+    +'<div class="inf"></div><div class="inf"></div></div>'
     +chips(FATE_FILTERS,IN.fate.filter,A,'ff')
     +'<div class="fscroll"><table class="ftbl"><thead><tr><th></th><th>馬名</th><th>性齢</th>'
     +'<th>所属</th><th>通算</th><th>今年</th><th>最終出走</th><th>獲得賞金</th><th>行き先</th></tr></thead><tbody>'
@@ -2559,6 +2563,9 @@ function inFate(){
   const fb=(BREED_FILTERS.find(f=>f[0]===IN.fate.bfilter)||BREED_FILTERS[0])[2];
   const selB=Object.keys(IN.fate.bsel).filter(k=>IN.fate.bsel[k]);
   s+='<div class="card"><h2>種牡馬・繁殖牝馬の引退</h2>'
+    +'<div class="inrow">'+fld('fb_year','繁殖引退年 <span>移した馬に入ります</span>',
+        'type="number" inputmode="numeric" value="'+esc(IN.fate.byear||fateYear())+'"')
+    +'<div class="inf"></div><div class="inf"></div></div>'
     +chips(BREED_FILTERS,IN.fate.bfilter,B,'fb')
     +'<div class="fscroll"><table class="ftbl"><thead><tr><th></th><th>馬名</th><th>区分</th>'
     +'<th>年齢</th><th>生年</th><th>産駒</th><th>現役引退年</th></tr></thead><tbody>'
@@ -2742,7 +2749,7 @@ function inBindBody(){
         inMsg('⚠️ 「'+name+'」は既に登録されています。別の馬ならもう一度押してください',false);
         inRender(); return;
       }
-      IN.nhCart.push(Object.assign({},h,{name:name}));
+      IN.nhCart.push(Object.assign({},h,{name:name, force:IN.nhForce}));
       IN.nh={name:'',birth:h.birth,color:'鹿毛',sex:'牡',sire:'',dam:'',
              trainer:h.trainer,base:h.base};      // 生年・調教師・所属は残す
       IN.nhForce=false; inMsg(name+' を追加しました',true); inRender();
@@ -2777,20 +2784,27 @@ function inBindBody(){
       IN.fate.dest[c.dataset.fd]=c.value; inRender(); });
     on('fa_clear','click',()=>{ IN.fate.sel={}; IN.fate.dest={}; inMsg(''); inRender(); });
     on('fb_clear','click',()=>{ IN.fate.bsel={}; inMsg(''); inRender(); });
+    on('fa_year','input',ev=>{ IN.fate.year=ev.target.value; });
+    on('fb_year','input',ev=>{ IN.fate.byear=ev.target.value; });
     on('fa_go','click',e=>{
+      const year=($('fa_year').value||'').trim();
+      if(!year){ inMsg('⚠️ 現役引退年を入れてください',false); return; }
       const items=Object.keys(IN.fate.sel).filter(k=>IN.fate.sel[k])
         .map(n=>({name:n, dest:IN.fate.dest[n]||defaultDest((DB.horses.get(n)||{}).sex)}));
       if(!items.length) return;
-      if(!confirm(items.length+'頭の去就を登録します。よろしいですか。\n\n'
+      if(!confirm(items.length+'頭の去就を登録します（現役引退年 '+year+'）。よろしいですか。\n\n'
         +items.map(x=>x.name+' → '+x.dest).join('\n'))) return;
-      busy(e.target,'登録中…',()=>api('retireHorses',{items:items}).then(j=>{
+      busy(e.target,'登録中…',()=>api('retireHorses',{items:items,year:year}).then(j=>{
         IN.fate.sel={}; IN.fate.dest={}; return reload(j.message); }));
     });
     on('fb_go','click',e=>{
+      const year=($('fb_year').value||'').trim();
+      if(!year){ inMsg('⚠️ 繁殖引退年を入れてください',false); return; }
       const names=Object.keys(IN.fate.bsel).filter(k=>IN.fate.bsel[k]);
       if(!names.length) return;
-      if(!confirm(names.length+'頭を引退馬へ移します。よろしいですか。\n\n'+names.join('\n'))) return;
-      busy(e.target,'登録中…',()=>api('retireBreeding',{names:names}).then(j=>{
+      if(!confirm(names.length+'頭を引退馬へ移します（繁殖引退年 '+year+'）。よろしいですか。\n\n'
+        +names.join('\n'))) return;
+      busy(e.target,'登録中…',()=>api('retireBreeding',{names:names,year:year}).then(j=>{
         IN.fate.bsel={}; return reload(j.message); }));
     });
   } else {
