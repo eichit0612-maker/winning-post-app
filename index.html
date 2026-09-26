@@ -266,6 +266,27 @@ text.dlabel{fill:var(--ink);font-size:12.5px;font-weight:700}
 .hbox .hn em{font-style:normal;font-weight:400;color:var(--muted);font-size:11.5px}
 .pzhint{font-size:11.5px;color:var(--accent);font-weight:700;margin-top:4px;min-height:14px}
 .inf input.locked{background:var(--panel2);color:var(--muted);font-weight:700}
+.btnrow{display:flex;gap:10px;align-items:stretch;margin-top:12px;flex-wrap:wrap}
+.fbar{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:10px}
+.chip{font-size:11.5px;border:1px solid var(--line);border-radius:14px;padding:3px 11px;
+  background:var(--panel);color:var(--muted);cursor:pointer;user-select:none}
+.chip.on{background:var(--accent);border-color:var(--accent);color:var(--on-bright);font-weight:700}
+.fscroll{max-height:440px;overflow:auto;border:1px solid var(--edge);border-radius:4px}
+.ftbl{width:100%;border-collapse:collapse;font-size:12.5px}
+.ftbl th{text-align:left;font-size:11px;color:var(--muted);padding:6px 8px;white-space:nowrap;
+  position:sticky;top:0;background:var(--panel);box-shadow:0 1px 0 var(--line)}
+.ftbl td{padding:5px 8px;border-top:1px solid var(--line);white-space:nowrap}
+.ftbl td.nm{font-weight:700} .ftbl td.dim{color:var(--muted)}
+.ftbl tr.warn td.nm::after{content:" CF";color:var(--jp);font-size:10px}
+.ftbl tbody tr:hover td{background:var(--panel2)}
+.ftbl input[type=checkbox]{width:15px;height:15px}
+select.mini{font-family:inherit;font-size:11.5px;padding:2px 4px;border:1px solid var(--line);
+  border-radius:3px;background:var(--panel);color:var(--ink)}
+.ftag{font-size:10.5px;font-weight:700;padding:1px 6px;border-radius:9px;color:var(--on-bright)}
+.ftag.st{background:var(--s1)} .ftag.br{background:var(--jp)}
+.fsum{background:var(--accent-soft);border-radius:4px;padding:9px 13px;font-size:12.5px;
+  font-weight:700;color:var(--accent);margin:12px 0}
+.ttl2{margin-top:0}
 .inf label span#rwn_0,.inf label span[id^="rwn_"]{font-weight:400;opacity:.75;color:var(--accent)}
 
 /* ---- 名馬列伝 ---- */
@@ -2236,7 +2257,8 @@ const IN={tab:'entry',cart:[],pending:null,cands:[],init:null,busy:false,
           horse:'',jockey:'',
           opts:null,
           nh:{name:'',birth:'',color:'鹿毛',sex:'牡',sire:'',dam:'',trainer:'',base:'栗東'},
-          nhForce:false};
+          nhForce:false, nhCart:[],
+          fate:{filter:'all', sel:{}, dest:{}, bfilter:'all', bsel:{}}};
 const IN_COLORS=['鹿毛','黒鹿毛','青鹿毛','青毛','芦毛','栗毛','栃栗毛','白毛'];
 const IN_SEXES=['牡','牝','セン'];
 const IN_BASES=['栗東','美浦','アメリカ','イギリス','フランス','アイルランド'];
@@ -2299,6 +2321,7 @@ function viewInput(){
     +'<button class="tabbtn'+(IN.tab==='entry'?' on':'')+'" data-it="entry">① 出走登録</button>'
     +'<button class="tabbtn'+(IN.tab==='result'?' on':'')+'" data-it="result">② 結果入力</button>'
     +'<button class="tabbtn'+(IN.tab==='horse'?' on':'')+'" data-it="horse">③ 新馬登録</button>'
+    +'<button class="tabbtn'+(IN.tab==='fate'?' on':'')+'" data-it="fate">④ 去就</button>'
     +'</div><div id="inbody"><div class="card"><div class="mapempty">読み込んでいます…</div></div></div>'
     +'<div id="inmsg" class="inmsg"></div>'
     +'<div class="note">合言葉を入れ直したいときは'
@@ -2453,6 +2476,113 @@ function inResult(){
   return s;
 }
 
+
+/* ---- ④ 去就（引退判定と繁殖引退） ---- */
+// 一覧はサイトが読み込み済みのシートから作る。APIは書き込みのときだけ使う
+const FATE_DEST=['種牡馬入り','繁殖入り','引退（乗馬・功労）','引退'];
+const defaultDest=sex=> sex==='牡' ? '種牡馬入り' : sex==='牝' ? '繁殖入り' : '引退';
+const fateYear=()=> DB&&DB.years.length ? Math.max.apply(null,DB.years) : 0;
+
+// 現役馬（状態が「現役」の馬）を、年齢の高い順・同年齢なら勝利の少ない順に並べる
+function fateActive(){
+  const y=fateYear(), out=[];
+  for(const h of DB.horses.values()){
+    if(h.status!=='現役'||!h.birth) continue;
+    const rs=h.runs||[], ty=rs.filter(r=>r.year===y);
+    out.push({h, age:y-(+h.birth), n:rs.length, w:rs.filter(r=>r.rank===1).length,
+      yn:ty.length, yw:ty.filter(r=>r.rank===1).length,
+      last:rs.length?rs[rs.length-1].date:'', prize:rs.reduce((t,r)=>t+r.prize,0)});
+  }
+  return out.sort((a,b)=>b.age-a.age||a.w-b.w||b.n-a.n);
+}
+// 種牡馬・繁殖牝馬
+function fateBreed(){
+  const y=fateYear(), out=[];
+  for(const h of DB.horses.values()){
+    if(h.status!=='種牡馬'&&h.status!=='繁殖') continue;
+    out.push({h, kind:h.status==='種牡馬'?'種牡馬':'繁殖牝馬',
+      age:h.birth?y-(+h.birth):null, kids:(h.children||[]).length});
+  }
+  return out.sort((a,b)=>(b.age||0)-(a.age||0)||a.kids-b.kids);
+}
+const FATE_FILTERS=[['all','すべて',()=>true],
+  ['old','4歳以上',e=>e.age>=4],
+  ['win0','4歳以上で未勝利',e=>e.age>=4&&e.w===0],
+  ['idle','今年は未出走',e=>e.yn===0]];
+const BREED_FILTERS=[['all','すべて',()=>true],
+  ['st','種牡馬',e=>e.kind==='種牡馬'],
+  ['br','繁殖牝馬',e=>e.kind==='繁殖牝馬'],
+  ['old','14歳以上',e=>e.age>=14]];
+
+function inFate(){
+  if(!DB) return '<div class="card"><div class="mapempty">読み込み中です。</div></div>';
+  const A=fateActive(), B=fateBreed();
+  const chips=(list,cur,src,pre)=>'<div class="fbar">'
+    +list.map(([k,lab,f])=>'<span class="chip'+(cur===k?' on':'')+'" data-'+pre+'="'+k+'">'
+      +esc(lab)+' '+src.filter(f).length+'頭</span>').join('')
+    +'</div>';
+
+  // 現役馬
+  const fa=(FATE_FILTERS.find(f=>f[0]===IN.fate.filter)||FATE_FILTERS[0])[2];
+  const selA=Object.keys(IN.fate.sel).filter(k=>IN.fate.sel[k]);
+  const cnt={}; for(const n of selA){ const d=IN.fate.dest[n]||defaultDest((DB.horses.get(n)||{}).sex); cnt[d]=(cnt[d]||0)+1; }
+  let s='<h1 class="ttl2">④ 去就</h1><div class="sub">現役馬の引退判定と、種牡馬・繁殖牝馬の引退をここで行います。</div>';
+
+  s+='<div class="card"><h2>現役馬の引退判定</h2>'
+    +chips(FATE_FILTERS,IN.fate.filter,A,'ff')
+    +'<div class="fscroll"><table class="ftbl"><thead><tr><th></th><th>馬名</th><th>性齢</th>'
+    +'<th>所属</th><th>通算</th><th>今年</th><th>最終出走</th><th>獲得賞金</th><th>行き先</th></tr></thead><tbody>'
+    +A.filter(fa).map(e=>{
+      const n=e.h.name, warn=e.age>=4&&e.w===0, on=!!IN.fate.sel[n];
+      return '<tr'+(warn?' class="warn"':'')+'><td><input type="checkbox" data-fa="'+esc(n)+'"'
+        +(on?' checked':'')+'></td>'
+        +'<td class="nm"><a class="link" href="#/horse/'+encodeURIComponent(n)+'">'+esc(n)+'</a></td>'
+        +'<td>'+esc(e.h.sex||'')+e.age+'</td><td class="dim">'+esc(e.h.base||'')+'</td>'
+        +'<td>'+e.n+'戦'+e.w+'勝</td><td class="dim">'+e.yn+'戦'+e.yw+'勝</td>'
+        +'<td class="dim">'+esc(e.last||'—')+'</td><td class="dim">'+num(e.prize)+'</td>'
+        +'<td><select class="mini" data-fd="'+esc(n)+'">'
+        +FATE_DEST.map(d=>opt(d,IN.fate.dest[n]||defaultDest(e.h.sex))).join('')+'</select></td></tr>';
+    }).join('')
+    +'</tbody></table></div>'
+    +(selA.length
+      ? '<div class="fsum">選んだ'+selA.length+'頭 ─ '
+        +Object.keys(cnt).map(k=>esc(k)+' '+cnt[k]+'頭').join(' ／ ')+'</div>'
+      : '<div class="note" style="margin:12px 0">チェックを付けると、ここに内訳が出ます。</div>')
+    +'<div class="btnrow"><button class="inbtn" id="fa_go"'+(selA.length?'':' disabled')
+    +'>まとめて登録する</button>'
+    +'<button class="inbtn sub" id="fa_clear">選択を解除</button></div>'
+    +'<div class="note">● は4歳以上で未勝利の馬です。判断の目安として印を付けています。<br>'
+    +'行き先は性別から決めています。乗馬・功労にするときだけ変えてください。<br>'
+    +'登録すると現役馬シートの状態列に書き込まれ、これまでどおり自動でシートが移ります。</div></div>';
+
+  // 種牡馬・繁殖牝馬
+  const fb=(BREED_FILTERS.find(f=>f[0]===IN.fate.bfilter)||BREED_FILTERS[0])[2];
+  const selB=Object.keys(IN.fate.bsel).filter(k=>IN.fate.bsel[k]);
+  s+='<div class="card"><h2>種牡馬・繁殖牝馬の引退</h2>'
+    +chips(BREED_FILTERS,IN.fate.bfilter,B,'fb')
+    +'<div class="fscroll"><table class="ftbl"><thead><tr><th></th><th>馬名</th><th>区分</th>'
+    +'<th>年齢</th><th>生年</th><th>産駒</th><th>現役引退年</th></tr></thead><tbody>'
+    +B.filter(fb).map(e=>{
+      const n=e.h.name, warn=e.age>=14, on=!!IN.fate.bsel[n];
+      return '<tr'+(warn?' class="warn"':'')+'><td><input type="checkbox" data-fb2="'+esc(n)+'"'
+        +(on?' checked':'')+'></td>'
+        +'<td class="nm"><a class="link" href="#/horse/'+encodeURIComponent(n)+'">'+esc(n)+'</a></td>'
+        +'<td><span class="ftag '+(e.kind==='種牡馬'?'st':'br')+'">'+esc(e.kind)+'</span></td>'
+        +'<td>'+(e.age===null?'—':e.age+'歳')+'</td><td class="dim">'+esc(e.h.birth||'—')+'</td>'
+        +'<td>'+e.kids+'頭</td><td class="dim">'+esc(e.h.retireYear||'—')+'</td></tr>';
+    }).join('')
+    +'</tbody></table></div>'
+    +(selB.length
+      ? '<div class="fsum">選んだ'+selB.length+'頭を引退馬へ移します</div>'
+      : '<div class="note" style="margin:12px 0">チェックを付けると、ここに頭数が出ます。</div>')
+    +'<div class="btnrow"><button class="inbtn" id="fb_go"'+(selB.length?'':' disabled')
+    +'>まとめて登録する</button>'
+    +'<button class="inbtn sub" id="fb_clear">選択を解除</button></div>'
+    +'<div class="note">● は14歳以上の馬です。<br>'
+    +'繁殖引退年には登録した年が入ります。シートのH列のチェックボックスは使わなくて構いません。</div></div>';
+  return s;
+}
+
 /* ---- ③ 新馬登録 ---- */
 // 父・母・調教師は既に使われている名前を候補に出す。
 // Googleフォームではできなかった部分で、血統がつながらない事故を防ぐのが狙い。
@@ -2463,7 +2593,7 @@ function inHorse(){
   const colors=[...new Set(IN_COLORS.concat(o.colors||[]))];
   const bases =[...new Set(IN_BASES.concat(o.bases||[]))];
 
-  let s='<div class="card"><h2>新しい馬を登録する</h2><div class="inrow">'
+  let s='<div class="card"><h2>1. 馬の情報</h2><div class="inrow">'
     +fld('h_name','馬名','type="text" value="'+esc(h.name)+'"')
     +fld('h_birth','生年','type="number" inputmode="numeric" value="'+esc(h.birth)+'"')
     // 並びはゲーム側の画面に合わせる: 馬名 → 生年 → 毛色 → 調教師・所属 → 血統
@@ -2479,12 +2609,24 @@ function inHorse(){
     +fld('h_dam','母 <span>同上</span>','type="text" list="dam-list" value="'+esc(h.dam)+'"')
     +'</div>'
     +list('sire-list',o.sires)+list('dam-list',o.dams)+list('trainer-list',o.trainers)
-    +'<div class="inrow" style="margin-top:6px"><div class="inf">'
-    +'<button class="inbtn" id="h_save">'+(IN.nhForce?'同名でも登録する':'登録する')+'</button></div>'
-    +'<div class="inf" style="flex:0 0 auto">'
-    +'<button class="inbtn sub" id="h_clear">入力を消す</button></div></div>'
-    +'<div class="note">IDは自動で振られます。'
+    +'<div class="btnrow"><button class="inbtn" id="h_add">'
+    +(IN.nhForce?'同名でもリストに追加':'リストに追加')+'</button>'
+    +'<button class="inbtn sub" id="h_clear">入力を消す</button></div>'
+    +'<div class="note">生年・調教師・所属は追加したあとも残ります。'
     +'父・母は既に登録のある名前から選ぶと、血統がつながります。</div></div>';
+
+  s+='<div class="card"><h2>2. 登録待ち'+(IN.nhCart.length?'（'+IN.nhCart.length+'頭）':'')+'</h2>'
+    +(IN.nhCart.length
+      ? IN.nhCart.map((h,i)=>'<div class="cartitem"><div><b>'+esc(h.name)+'</b>'
+          +'<span class="sub2">'+esc(h.sex+'・'+h.color+'・'+h.birth+'年／'
+            +h.trainer+'・'+h.base+'／父 '+h.sire+' × 母 '+h.dam)
+          +'</span></div><button data-hdel="'+i+'" title="取り消す">×</button></div>').join('')
+      : '<div class="mapempty">まだ追加されていません</div>')
+    +'<div class="btnrow"><button class="inbtn" id="h_submit"'+(IN.nhCart.length?'':' disabled')
+    +'>まとめて登録する</button>'
+    +'<button class="inbtn sub" id="h_clearall">空にする</button></div>'
+    +'<div class="note">IDは登録するときにまとめて振られます。'
+    +'1頭ごとの通信がないので、何頭入れても登録は1回です。</div></div>';
 
   // 既に同じ名前があれば、押す前に知らせる
   const known=h.name.trim()&&DB&&DB.horses.has(nm(h.name.trim()));
@@ -2507,7 +2649,8 @@ function inPrizePreview(ri,hi){
 
 function inRender(){
   const b=document.getElementById('inbody'); if(!b) return;
-  b.innerHTML=IN.tab==='entry'?inEntry():IN.tab==='result'?inResult():inHorse();
+  b.innerHTML=IN.tab==='entry'?inEntry():IN.tab==='result'?inResult()
+             :IN.tab==='fate'?inFate():inHorse();
   inBindBody();
 }
 
@@ -2587,25 +2730,68 @@ function inBindBody(){
              trainer:IN.nh.trainer,base:IN.nh.base};
       IN.nhForce=false; inMsg(''); inRender();
     });
-    on('h_save','click',e=>{
-      const h=IN.nh;
-      if(!h.name.trim()){ inMsg('⚠️ 馬名を入れてください',false); return; }
+    on('h_add','click',()=>{
+      const h=IN.nh, name=h.name.trim();
+      if(!name){ inMsg('⚠️ 馬名を入れてください',false); return; }
       if(!h.birth){ inMsg('⚠️ 生年を入れてください',false); return; }
-      busy(e.target,'登録中…',()=>api('registerHorse',
-        {horse:Object.assign({},h,{force:IN.nhForce})}).then(j=>{
-          inMsg(j.data.message,true);
-          IN.nh={name:'',birth:h.birth,color:'鹿毛',sex:'牡',sire:'',dam:'',
-                 trainer:h.trainer,base:h.base};
-          IN.nhForce=false;
-          IN.init=null; IN.opts=null;          // 馬と候補の一覧を取り直す
-          return api('init').then(r=>{ IN.init=r.data; })
-            .then(()=>api('horseOptions')).then(r=>{ IN.opts=r.data; inRender(); });
-        }).catch(err=>{
-          // 同名があるとGASが断ってくる。もう一度押せば登録できるようにする
-          if(/既に登録されています/.test(err.message)) IN.nhForce=true;
-          inMsg('⚠️ '+err.message,false); inRender();
-          throw err;
-        }));
+      if(IN.nhCart.some(x=>x.name===name)){
+        inMsg('⚠️ 「'+name+'」はリストに入っています',false); return; }
+      // 既に登録済みの名前は一度止める。もう一度押せば追加できる
+      if(!IN.nhForce && DB && DB.horses.has(nm(name))){
+        IN.nhForce=true;
+        inMsg('⚠️ 「'+name+'」は既に登録されています。別の馬ならもう一度押してください',false);
+        inRender(); return;
+      }
+      IN.nhCart.push(Object.assign({},h,{name:name}));
+      IN.nh={name:'',birth:h.birth,color:'鹿毛',sex:'牡',sire:'',dam:'',
+             trainer:h.trainer,base:h.base};      // 生年・調教師・所属は残す
+      IN.nhForce=false; inMsg(name+' を追加しました',true); inRender();
+    });
+    document.querySelectorAll('[data-hdel]').forEach(b=>b.onclick=()=>{
+      IN.nhCart.splice(+b.dataset.hdel,1); inMsg(''); inRender(); });
+    on('h_clearall','click',()=>{ IN.nhCart=[]; inMsg('リストを空にしました',true); inRender(); });
+    on('h_submit','click',e=>{
+      if(!IN.nhCart.length) return;
+      busy(e.target,'登録中…',()=>api('registerHorses',{horses:IN.nhCart}).then(j=>{
+        IN.nhCart=[]; IN.init=null; IN.opts=null;
+        inMsg(j.message+'\n最新のデータを読み直しています…',true);
+        return reloadData()
+          .then(()=>api('init')).then(r=>{ IN.init=r.data; })
+          .then(()=>api('horseOptions')).then(r=>{ IN.opts=r.data;
+            inMsg(j.message+'\nサイトに反映しました',true); inRender(); });
+      }));
+    });
+  } else if(IN.tab==='fate'){
+    const reload=msg=>{ IN.init=null;
+      inMsg(msg+'\n最新のデータを読み直しています…',true);
+      return reloadData().then(()=>{ inMsg(msg+'\nサイトに反映しました',true); inRender(); }); };
+    document.querySelectorAll('[data-ff]').forEach(c=>c.onclick=()=>{
+      IN.fate.filter=c.dataset.ff; inRender(); });
+    document.querySelectorAll('[data-fb]').forEach(c=>c.onclick=()=>{
+      IN.fate.bfilter=c.dataset.fb; inRender(); });
+    document.querySelectorAll('[data-fa]').forEach(c=>c.onchange=()=>{
+      IN.fate.sel[c.dataset.fa]=c.checked; inRender(); });
+    document.querySelectorAll('[data-fb2]').forEach(c=>c.onchange=()=>{
+      IN.fate.bsel[c.dataset.fb2]=c.checked; inRender(); });
+    document.querySelectorAll('[data-fd]').forEach(c=>c.onchange=()=>{
+      IN.fate.dest[c.dataset.fd]=c.value; inRender(); });
+    on('fa_clear','click',()=>{ IN.fate.sel={}; IN.fate.dest={}; inMsg(''); inRender(); });
+    on('fb_clear','click',()=>{ IN.fate.bsel={}; inMsg(''); inRender(); });
+    on('fa_go','click',e=>{
+      const items=Object.keys(IN.fate.sel).filter(k=>IN.fate.sel[k])
+        .map(n=>({name:n, dest:IN.fate.dest[n]||defaultDest((DB.horses.get(n)||{}).sex)}));
+      if(!items.length) return;
+      if(!confirm(items.length+'頭の去就を登録します。よろしいですか。\n\n'
+        +items.map(x=>x.name+' → '+x.dest).join('\n'))) return;
+      busy(e.target,'登録中…',()=>api('retireHorses',{items:items}).then(j=>{
+        IN.fate.sel={}; IN.fate.dest={}; return reload(j.message); }));
+    });
+    on('fb_go','click',e=>{
+      const names=Object.keys(IN.fate.bsel).filter(k=>IN.fate.bsel[k]);
+      if(!names.length) return;
+      if(!confirm(names.length+'頭を引退馬へ移します。よろしいですか。\n\n'+names.join('\n'))) return;
+      busy(e.target,'登録中…',()=>api('retireBreeding',{names:names}).then(j=>{
+        IN.fate.bsel={}; return reload(j.message); }));
     });
   } else {
     on('r_load','click',e=>busy(e.target,'読み込み中…',()=>api('getPending').then(j=>{
