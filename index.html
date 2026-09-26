@@ -287,6 +287,7 @@ select.mini{font-family:inherit;font-size:11.5px;padding:2px 4px;border:1px soli
 .fsum{background:var(--accent-soft);border-radius:4px;padding:9px 13px;font-size:12.5px;
   font-weight:700;color:var(--accent);margin:12px 0}
 .ttl2{margin-top:0}
+.card h2 .h2sub{font-weight:400;font-size:11.5px;color:var(--muted);margin-left:6px}
 .intabs{display:flex;gap:6px;margin:0 0 16px;flex-wrap:wrap}
 .fsum .off{font-weight:400;color:var(--muted)}
 #fa_msg,#fb_msg{white-space:pre-wrap;margin-top:10px;text-align:left;padding:0 2px}
@@ -2567,10 +2568,7 @@ function fateSumB(){
   const sel=Object.keys(IN.fate.bsel).filter(k=>IN.fate.bsel[k]);
   if(!sel.length) return '<div class="note" style="margin:12px 0">'
     +'チェックを付けると、ここに頭数が出ます。</div>';
-  const here=fateBreed(IN.fate.region||'日本');
-  return '<div class="fsum">選んだ'+sel.length+'頭を引退馬へ移します'
-    +(sel.some(n=>!here.some(e=>e.h.name===n))
-      ? ' <span class="off">※他の地域の馬を含みます</span>':'')+'</div>';
+  return '<div class="fsum">選んだ'+sel.length+'頭を引退馬へ移します</div>';
 }
 // 内訳とボタンの有効・無効だけを更新する
 function fateRefresh(){
@@ -2589,7 +2587,9 @@ const fateMsg=(id,t,ok)=>{ const e=document.getElementById(id);
 function inFate(){
   if(!DB) return '<div class="card"><div class="mapempty">読み込み中です。</div></div>';
   const region=IN.fate.region||'日本';
-  const A=fateActive(region), B=fateBreed(region);
+  // 種牡馬・繁殖牝馬は地域で分けない。日本で走った馬を海外の牧場へ送ることがあり、
+  // 地域で切ると見つからなくなるため。現役馬だけ地域タブで分ける
+  const A=fateActive(region), B=fateBreed();
   const chips=(list,cur,src,pre)=>'<div class="fbar">'
     +list.map(([k,lab,f])=>'<span class="chip'+(cur===k?' on':'')+'" data-'+pre+'="'+k+'">'
       +esc(lab)+' '+src.filter(f).length+'頭</span>').join('')
@@ -2599,18 +2599,18 @@ function inFate(){
   const fa=(FATE_FILTERS.find(f=>f[0]===IN.fate.filter)||FATE_FILTERS[0])[2];
   const selA=Object.keys(IN.fate.sel).filter(k=>IN.fate.sel[k]);
   const cnt={}; for(const n of selA){ const d=IN.fate.dest[n]||defaultDest((DB.horses.get(n)||{}).sex); cnt[d]=(cnt[d]||0)+1; }
-  // 地域ごとに分ける。まとめると頭数が多くて探しにくい
-  let s='<h1 class="ttl2">④ 去就</h1><div class="sub">現役馬の引退判定と、種牡馬・繁殖牝馬の引退をここで行います。</div>'
+  let s='<h1 class="ttl2">④ 去就</h1><div class="sub">現役馬の引退判定と、種牡馬・繁殖牝馬の引退をここで行います。</div>';
+
+  // 現役馬は頭数が多いので地域で分ける。タブはこのカードの中だけに効く
+  s+='<div class="card"><h2>現役馬の引退判定</h2>'
     +'<div class="intabs">'
     +FATE_REGIONS.map(r=>{
-        const c=fateActive(r).length+fateBreed(r).length;
+        const c=fateActive(r).length;
         if(!c&&r==='所属不明') return '';
         return '<button class="tabbtn'+(region===r?' on':'')+'" data-fr="'+esc(r)+'">'
           +esc(r)+' <span class="cnt">'+c+'</span></button>';
       }).join('')
-    +'</div>';
-
-  s+='<div class="card"><h2>現役馬の引退判定</h2>'
+    +'</div>'
     +'<div class="inrow">'+fld('fa_year','現役引退年 <span>移した馬に入ります</span>',
         'type="number" inputmode="numeric" value="'+esc(IN.fate.year||fateYear())+'"')
     +'<div class="inf"></div><div class="inf"></div></div>'
@@ -2642,7 +2642,7 @@ function inFate(){
   // 種牡馬・繁殖牝馬
   const fb=(BREED_FILTERS.find(f=>f[0]===IN.fate.bfilter)||BREED_FILTERS[0])[2];
   const selB=Object.keys(IN.fate.bsel).filter(k=>IN.fate.bsel[k]);
-  s+='<div class="card"><h2>種牡馬・繁殖牝馬の引退</h2>'
+  s+='<div class="card"><h2>種牡馬・繁殖牝馬の引退 <span class="h2sub">所属を問わず全'+B.length+'頭</span></h2>'
     +'<div class="inrow">'+fld('fb_year','繁殖引退年 <span>移した馬に入ります</span>',
         'type="number" inputmode="numeric" value="'+esc(IN.fate.byear||fateYear())+'"')
     +'<div class="inf"></div><div class="inf"></div></div>'
@@ -2664,7 +2664,9 @@ function inFate(){
     +'>まとめて登録する</button>'
     +'<button class="inbtn sub" id="fb_clear">選択を解除</button></div>'
     +'<div class="inmsg" id="fb_msg"></div>'
-    +'<div class="note">名前順に並べています。● は14歳以上の馬です。<br>'
+    +'<div class="note">こちらは地域で分けていません。'
+    +'日本で走った馬を海外の牧場へ送ることがあり、分けると見つからなくなるためです。<br>'
+    +'名前順（あ→わ）に並べています。● は14歳以上の馬です。<br>'
     +'繁殖引退年には登録した年が入ります。シートのH列のチェックボックスは使わなくて構いません。</div></div>';
   return s;
 }
