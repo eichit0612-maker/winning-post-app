@@ -287,6 +287,10 @@ select.mini{font-family:inherit;font-size:11.5px;padding:2px 4px;border:1px soli
 .fsum{background:var(--accent-soft);border-radius:4px;padding:9px 13px;font-size:12.5px;
   font-weight:700;color:var(--accent);margin:12px 0}
 .ttl2{margin-top:0}
+.intabs{display:flex;gap:6px;margin:0 0 16px;flex-wrap:wrap}
+.fsum .off{font-weight:400;color:var(--muted)}
+.intabs .tabbtn{font-size:13px;padding:6px 14px}
+.tabbtn .cnt{opacity:.7;font-weight:400;font-size:11px;margin-left:3px}
 .inf label span#rwn_0,.inf label span[id^="rwn_"]{font-weight:400;opacity:.75;color:var(--accent)}
 
 /* ---- 名馬列伝 ---- */
@@ -2258,7 +2262,7 @@ const IN={tab:'entry',cart:[],pending:null,cands:[],init:null,busy:false,
           opts:null,
           nh:{name:'',birth:'',color:'鹿毛',sex:'牡',sire:'',dam:'',trainer:'',base:'栗東'},
           nhForce:false, nhCart:[],
-          fate:{filter:'all', sel:{}, dest:{}, year:'',
+          fate:{region:'日本', filter:'all', sel:{}, dest:{}, year:'',
                 bfilter:'all', bsel:{}, byear:''}};
 const IN_COLORS=['鹿毛','黒鹿毛','青鹿毛','青毛','芦毛','栗毛','栃栗毛','白毛'];
 const IN_SEXES=['牡','牝','セン'];
@@ -2484,23 +2488,33 @@ const FATE_DEST=['種牡馬入り','繁殖入り','引退（乗馬・功労）',
 const defaultDest=sex=> sex==='牡' ? '種牡馬入り' : sex==='牝' ? '繁殖入り' : '引退';
 const fateYear=()=> DB&&DB.years.length ? Math.max.apply(null,DB.years) : 0;
 
-// 現役馬（状態が「現役」の馬）を、年齢の高い順・同年齢なら勝利の少ない順に並べる
-function fateActive(){
+// 所属から地域を決める。分からない馬は「所属不明」にまとめる
+// （種牡馬・繁殖牝馬のシートには所属の列がないため、登録時の所属が残っていない馬がある）
+const FATE_REGIONS=['日本','アメリカ','欧州','所属不明'];
+const fateRegion=h=>h.region||'所属不明';
+
+// 現役馬（状態が「現役」の馬）を、年齢の高い順・同年齢なら勝利の少ない順に並べる。
+// 2歳は引退させられないので一覧に出さない
+function fateActive(region){
   const y=fateYear(), out=[];
   for(const h of DB.horses.values()){
     if(h.status!=='現役'||!h.birth) continue;
+    const age=y-(+h.birth);
+    if(age<3) continue;
+    if(region&&fateRegion(h)!==region) continue;
     const rs=h.runs||[], ty=rs.filter(r=>r.year===y);
-    out.push({h, age:y-(+h.birth), n:rs.length, w:rs.filter(r=>r.rank===1).length,
+    out.push({h, age:age, n:rs.length, w:rs.filter(r=>r.rank===1).length,
       yn:ty.length, yw:ty.filter(r=>r.rank===1).length,
       last:rs.length?rs[rs.length-1].date:'', prize:rs.reduce((t,r)=>t+r.prize,0)});
   }
   return out.sort((a,b)=>b.age-a.age||a.w-b.w||b.n-a.n);
 }
 // 種牡馬・繁殖牝馬
-function fateBreed(){
+function fateBreed(region){
   const y=fateYear(), out=[];
   for(const h of DB.horses.values()){
     if(h.status!=='種牡馬'&&h.status!=='繁殖') continue;
+    if(region&&fateRegion(h)!==region) continue;
     out.push({h, kind:h.status==='種牡馬'?'種牡馬':'繁殖牝馬',
       age:h.birth?y-(+h.birth):null, kids:(h.children||[]).length});
   }
@@ -2517,7 +2531,8 @@ const BREED_FILTERS=[['all','すべて',()=>true],
 
 function inFate(){
   if(!DB) return '<div class="card"><div class="mapempty">読み込み中です。</div></div>';
-  const A=fateActive(), B=fateBreed();
+  const region=IN.fate.region||'日本';
+  const A=fateActive(region), B=fateBreed(region);
   const chips=(list,cur,src,pre)=>'<div class="fbar">'
     +list.map(([k,lab,f])=>'<span class="chip'+(cur===k?' on':'')+'" data-'+pre+'="'+k+'">'
       +esc(lab)+' '+src.filter(f).length+'頭</span>').join('')
@@ -2527,7 +2542,16 @@ function inFate(){
   const fa=(FATE_FILTERS.find(f=>f[0]===IN.fate.filter)||FATE_FILTERS[0])[2];
   const selA=Object.keys(IN.fate.sel).filter(k=>IN.fate.sel[k]);
   const cnt={}; for(const n of selA){ const d=IN.fate.dest[n]||defaultDest((DB.horses.get(n)||{}).sex); cnt[d]=(cnt[d]||0)+1; }
-  let s='<h1 class="ttl2">④ 去就</h1><div class="sub">現役馬の引退判定と、種牡馬・繁殖牝馬の引退をここで行います。</div>';
+  // 地域ごとに分ける。まとめると頭数が多くて探しにくい
+  let s='<h1 class="ttl2">④ 去就</h1><div class="sub">現役馬の引退判定と、種牡馬・繁殖牝馬の引退をここで行います。</div>'
+    +'<div class="intabs">'
+    +FATE_REGIONS.map(r=>{
+        const c=fateActive(r).length+fateBreed(r).length;
+        if(!c&&r==='所属不明') return '';
+        return '<button class="tabbtn'+(region===r?' on':'')+'" data-fr="'+esc(r)+'">'
+          +esc(r)+' <span class="cnt">'+c+'</span></button>';
+      }).join('')
+    +'</div>';
 
   s+='<div class="card"><h2>現役馬の引退判定</h2>'
     +'<div class="inrow">'+fld('fa_year','現役引退年 <span>移した馬に入ります</span>',
@@ -2550,12 +2574,15 @@ function inFate(){
     +'</tbody></table></div>'
     +(selA.length
       ? '<div class="fsum">選んだ'+selA.length+'頭 ─ '
-        +Object.keys(cnt).map(k=>esc(k)+' '+cnt[k]+'頭').join(' ／ ')+'</div>'
+        +Object.keys(cnt).map(k=>esc(k)+' '+cnt[k]+'頭').join(' ／ ')
+        +(selA.some(n=>!A.some(e=>e.h.name===n))?' <span class="off">※他の地域の馬を含みます</span>':'')
+        +'</div>'
       : '<div class="note" style="margin:12px 0">チェックを付けると、ここに内訳が出ます。</div>')
     +'<div class="btnrow"><button class="inbtn" id="fa_go"'+(selA.length?'':' disabled')
     +'>まとめて登録する</button>'
     +'<button class="inbtn sub" id="fa_clear">選択を解除</button></div>'
-    +'<div class="note">● は4歳以上で未勝利の馬です。判断の目安として印を付けています。<br>'
+    +'<div class="note">2歳馬は引退させられないので一覧に出していません。<br>'
+    +'● は4歳以上で未勝利の馬です。判断の目安として印を付けています。<br>'
     +'行き先は性別から決めています。乗馬・功労にするときだけ変えてください。<br>'
     +'登録すると現役馬シートの状態列に書き込まれ、これまでどおり自動でシートが移ります。</div></div>';
 
@@ -2580,7 +2607,9 @@ function inFate(){
     }).join('')
     +'</tbody></table></div>'
     +(selB.length
-      ? '<div class="fsum">選んだ'+selB.length+'頭を引退馬へ移します</div>'
+      ? '<div class="fsum">選んだ'+selB.length+'頭を引退馬へ移します'
+        +(selB.some(n=>!B.some(e=>e.h.name===n))?' <span class="off">※他の地域の馬を含みます</span>':'')
+        +'</div>'
       : '<div class="note" style="margin:12px 0">チェックを付けると、ここに頭数が出ます。</div>')
     +'<div class="btnrow"><button class="inbtn" id="fb_go"'+(selB.length?'':' disabled')
     +'>まとめて登録する</button>'
@@ -2772,6 +2801,9 @@ function inBindBody(){
     const reload=msg=>{ IN.init=null;
       inMsg(msg+'\n最新のデータを読み直しています…',true);
       return reloadData().then(()=>{ inMsg(msg+'\nサイトに反映しました',true); inRender(); }); };
+    document.querySelectorAll('[data-fr]').forEach(b=>b.onclick=()=>{
+      IN.fate.region=b.dataset.fr; IN.fate.filter='all'; IN.fate.bfilter='all';
+      inMsg(''); inRender(); });
     document.querySelectorAll('[data-ff]').forEach(c=>c.onclick=()=>{
       IN.fate.filter=c.dataset.ff; inRender(); });
     document.querySelectorAll('[data-fb]').forEach(c=>c.onclick=()=>{
