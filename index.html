@@ -289,6 +289,7 @@ select.mini{font-family:inherit;font-size:11.5px;padding:2px 4px;border:1px soli
 .ttl2{margin-top:0}
 .intabs{display:flex;gap:6px;margin:0 0 16px;flex-wrap:wrap}
 .fsum .off{font-weight:400;color:var(--muted)}
+#fa_msg,#fb_msg{white-space:pre-wrap;margin-top:10px}
 .intabs .tabbtn{font-size:13px;padding:6px 14px}
 .tabbtn .cnt{opacity:.7;font-weight:400;font-size:11px;margin-left:3px}
 .inf label span#rwn_0,.inf label span[id^="rwn_"]{font-weight:400;opacity:.75;color:var(--accent)}
@@ -2529,6 +2530,44 @@ const BREED_FILTERS=[['all','すべて',()=>true],
   ['br','繁殖牝馬',e=>e.kind==='繁殖牝馬'],
   ['old','14歳以上',e=>e.age>=14]];
 
+// 内訳は選択のたびに作り直すが、表には触らない。
+// 表ごと描き直すとスクロールが先頭へ戻ってしまう
+function fateSumA(){
+  const sel=Object.keys(IN.fate.sel).filter(k=>IN.fate.sel[k]);
+  if(!sel.length) return '<div class="note" style="margin:12px 0">'
+    +'チェックを付けると、ここに内訳が出ます。</div>';
+  const here=fateActive(IN.fate.region||'日本');
+  const cnt={};
+  for(const n of sel){ const d=IN.fate.dest[n]||defaultDest((DB.horses.get(n)||{}).sex);
+    cnt[d]=(cnt[d]||0)+1; }
+  return '<div class="fsum">選んだ'+sel.length+'頭 ─ '
+    +Object.keys(cnt).map(k=>esc(k)+' '+cnt[k]+'頭').join(' ／ ')
+    +(sel.some(n=>!here.some(e=>e.h.name===n))
+      ? ' <span class="off">※他の地域の馬を含みます</span>':'')+'</div>';
+}
+function fateSumB(){
+  const sel=Object.keys(IN.fate.bsel).filter(k=>IN.fate.bsel[k]);
+  if(!sel.length) return '<div class="note" style="margin:12px 0">'
+    +'チェックを付けると、ここに頭数が出ます。</div>';
+  const here=fateBreed(IN.fate.region||'日本');
+  return '<div class="fsum">選んだ'+sel.length+'頭を引退馬へ移します'
+    +(sel.some(n=>!here.some(e=>e.h.name===n))
+      ? ' <span class="off">※他の地域の馬を含みます</span>':'')+'</div>';
+}
+// 内訳とボタンの有効・無効だけを更新する
+function fateRefresh(){
+  const $=id=>document.getElementById(id);
+  const a=$('fa_sum'), b=$('fb_sum');
+  if(a) a.innerHTML=fateSumA();
+  if(b) b.innerHTML=fateSumB();
+  const ga=$('fa_go'), gb=$('fb_go');
+  if(ga) ga.disabled=!Object.keys(IN.fate.sel).some(k=>IN.fate.sel[k]);
+  if(gb) gb.disabled=!Object.keys(IN.fate.bsel).some(k=>IN.fate.bsel[k]);
+}
+// 登録ボタンのすぐ下に出す知らせ。画面の先頭まで戻らなくても読める
+const fateMsg=(id,t,ok)=>{ const e=document.getElementById(id);
+  if(e){ e.textContent=t||''; e.className='inmsg'+(t?(ok?' ok':' ng'):''); } };
+
 function inFate(){
   if(!DB) return '<div class="card"><div class="mapempty">読み込み中です。</div></div>';
   const region=IN.fate.region||'日本';
@@ -2572,15 +2611,11 @@ function inFate(){
         +FATE_DEST.map(d=>opt(d,IN.fate.dest[n]||defaultDest(e.h.sex))).join('')+'</select></td></tr>';
     }).join('')
     +'</tbody></table></div>'
-    +(selA.length
-      ? '<div class="fsum">選んだ'+selA.length+'頭 ─ '
-        +Object.keys(cnt).map(k=>esc(k)+' '+cnt[k]+'頭').join(' ／ ')
-        +(selA.some(n=>!A.some(e=>e.h.name===n))?' <span class="off">※他の地域の馬を含みます</span>':'')
-        +'</div>'
-      : '<div class="note" style="margin:12px 0">チェックを付けると、ここに内訳が出ます。</div>')
+    +'<div id="fa_sum">'+fateSumA()+'</div>'
     +'<div class="btnrow"><button class="inbtn" id="fa_go"'+(selA.length?'':' disabled')
     +'>まとめて登録する</button>'
     +'<button class="inbtn sub" id="fa_clear">選択を解除</button></div>'
+    +'<div class="inmsg" id="fa_msg"></div>'
     +'<div class="note">2歳馬は引退させられないので一覧に出していません。<br>'
     +'● は4歳以上で未勝利の馬です。判断の目安として印を付けています。<br>'
     +'行き先は性別から決めています。乗馬・功労にするときだけ変えてください。<br>'
@@ -2606,14 +2641,11 @@ function inFate(){
         +'<td>'+e.kids+'頭</td><td class="dim">'+esc(e.h.retireYear||'—')+'</td></tr>';
     }).join('')
     +'</tbody></table></div>'
-    +(selB.length
-      ? '<div class="fsum">選んだ'+selB.length+'頭を引退馬へ移します'
-        +(selB.some(n=>!B.some(e=>e.h.name===n))?' <span class="off">※他の地域の馬を含みます</span>':'')
-        +'</div>'
-      : '<div class="note" style="margin:12px 0">チェックを付けると、ここに頭数が出ます。</div>')
+    +'<div id="fb_sum">'+fateSumB()+'</div>'
     +'<div class="btnrow"><button class="inbtn" id="fb_go"'+(selB.length?'':' disabled')
     +'>まとめて登録する</button>'
     +'<button class="inbtn sub" id="fb_clear">選択を解除</button></div>'
+    +'<div class="inmsg" id="fb_msg"></div>'
     +'<div class="note">● は14歳以上の馬です。<br>'
     +'繁殖引退年には登録した年が入ります。シートのH列のチェックボックスは使わなくて構いません。</div></div>';
   return s;
@@ -2798,9 +2830,14 @@ function inBindBody(){
       }));
     });
   } else if(IN.tab==='fate'){
-    const reload=msg=>{ IN.init=null;
-      inMsg(msg+'\n最新のデータを読み直しています…',true);
-      return reloadData().then(()=>{ inMsg(msg+'\nサイトに反映しました',true); inRender(); }); };
+    const reload=(id,msg)=>{ IN.init=null;
+      fateMsg(id,msg+'\n最新のデータを読み直しています…',true);
+      inMsg(msg,true);
+      return reloadData().then(()=>{ inRender();
+        fateMsg(id,msg+'\nサイトに反映しました',true); }); };
+    // 失敗したときもボタンの真下に出す。画面の先頭まで戻らないと読めないのを避ける
+    const fbusy=(el,id,fn)=>{ fateMsg(id,'');
+      busy(el,'登録中…',()=>fn().catch(err=>{ fateMsg(id,'⚠️ '+err.message,false); throw err; })); };
     document.querySelectorAll('[data-fr]').forEach(b=>b.onclick=()=>{
       IN.fate.region=b.dataset.fr; IN.fate.filter='all'; IN.fate.bfilter='all';
       inMsg(''); inRender(); });
@@ -2808,36 +2845,41 @@ function inBindBody(){
       IN.fate.filter=c.dataset.ff; inRender(); });
     document.querySelectorAll('[data-fb]').forEach(c=>c.onclick=()=>{
       IN.fate.bfilter=c.dataset.fb; inRender(); });
+    // 表は描き直さない。内訳とボタンだけ更新して、スクロール位置を保つ
     document.querySelectorAll('[data-fa]').forEach(c=>c.onchange=()=>{
-      IN.fate.sel[c.dataset.fa]=c.checked; inRender(); });
+      IN.fate.sel[c.dataset.fa]=c.checked; fateRefresh(); });
     document.querySelectorAll('[data-fb2]').forEach(c=>c.onchange=()=>{
-      IN.fate.bsel[c.dataset.fb2]=c.checked; inRender(); });
+      IN.fate.bsel[c.dataset.fb2]=c.checked; fateRefresh(); });
     document.querySelectorAll('[data-fd]').forEach(c=>c.onchange=()=>{
-      IN.fate.dest[c.dataset.fd]=c.value; inRender(); });
-    on('fa_clear','click',()=>{ IN.fate.sel={}; IN.fate.dest={}; inMsg(''); inRender(); });
-    on('fb_clear','click',()=>{ IN.fate.bsel={}; inMsg(''); inRender(); });
+      IN.fate.dest[c.dataset.fd]=c.value; fateRefresh(); });
+    on('fa_clear','click',()=>{ IN.fate.sel={}; IN.fate.dest={};
+      document.querySelectorAll('[data-fa]').forEach(c=>{ c.checked=false; });
+      fateMsg('fa_msg',''); fateRefresh(); });
+    on('fb_clear','click',()=>{ IN.fate.bsel={};
+      document.querySelectorAll('[data-fb2]').forEach(c=>{ c.checked=false; });
+      fateMsg('fb_msg',''); fateRefresh(); });
     on('fa_year','input',ev=>{ IN.fate.year=ev.target.value; });
     on('fb_year','input',ev=>{ IN.fate.byear=ev.target.value; });
     on('fa_go','click',e=>{
       const year=($('fa_year').value||'').trim();
-      if(!year){ inMsg('⚠️ 現役引退年を入れてください',false); return; }
+      if(!year){ fateMsg('fa_msg','⚠️ 現役引退年を入れてください',false); return; }
       const items=Object.keys(IN.fate.sel).filter(k=>IN.fate.sel[k])
         .map(n=>({name:n, dest:IN.fate.dest[n]||defaultDest((DB.horses.get(n)||{}).sex)}));
       if(!items.length) return;
       if(!confirm(items.length+'頭の去就を登録します（現役引退年 '+year+'）。よろしいですか。\n\n'
         +items.map(x=>x.name+' → '+x.dest).join('\n'))) return;
-      busy(e.target,'登録中…',()=>api('retireHorses',{items:items,year:year}).then(j=>{
-        IN.fate.sel={}; IN.fate.dest={}; return reload(j.message); }));
+      fbusy(e.target,'fa_msg',()=>api('retireHorses',{items:items,year:year}).then(j=>{
+        IN.fate.sel={}; IN.fate.dest={}; return reload('fa_msg',j.message); }));
     });
     on('fb_go','click',e=>{
       const year=($('fb_year').value||'').trim();
-      if(!year){ inMsg('⚠️ 繁殖引退年を入れてください',false); return; }
+      if(!year){ fateMsg('fb_msg','⚠️ 繁殖引退年を入れてください',false); return; }
       const names=Object.keys(IN.fate.bsel).filter(k=>IN.fate.bsel[k]);
       if(!names.length) return;
       if(!confirm(names.length+'頭を引退馬へ移します（繁殖引退年 '+year+'）。よろしいですか。\n\n'
         +names.join('\n'))) return;
-      busy(e.target,'登録中…',()=>api('retireBreeding',{names:names,year:year}).then(j=>{
-        IN.fate.bsel={}; return reload(j.message); }));
+      fbusy(e.target,'fb_msg',()=>api('retireBreeding',{names:names,year:year}).then(j=>{
+        IN.fate.bsel={}; return reload('fb_msg',j.message); }));
     });
   } else {
     on('r_load','click',e=>busy(e.target,'読み込み中…',()=>api('getPending').then(j=>{
