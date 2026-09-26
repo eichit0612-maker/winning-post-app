@@ -288,6 +288,24 @@ select.mini{font-family:inherit;font-size:11.5px;padding:2px 4px;border:1px soli
   font-weight:700;color:var(--accent);margin:12px 0}
 .ttl2{margin-top:0}
 .card h2 .h2sub{font-weight:400;font-size:11.5px;color:var(--muted);margin-left:6px}
+.ckhead{display:flex;align-items:baseline;gap:10px;font-weight:800;font-size:15px;
+  padding:10px 13px;border-radius:4px;margin-bottom:14px}
+.ckhead.ok{background:var(--accent-soft);color:var(--accent)}
+.ckhead.ng{background:var(--gold-soft);color:var(--gold-ink)}
+.ckhead span{margin-left:auto;font-weight:400;font-size:11.5px;color:var(--muted)}
+.cktbl{width:100%;border-collapse:collapse;font-size:12.5px}
+.cktbl td{padding:6px 8px;border-top:1px solid var(--line);vertical-align:top}
+.cktbl tr:first-child td{border-top:none}
+.cktbl td.c{font-weight:700;white-space:nowrap}
+.cktbl td.v{white-space:nowrap;text-align:right;font-variant-numeric:tabular-nums}
+.cktbl td.d{color:var(--muted);line-height:1.7}
+.cktbl tr.ng td.v{color:var(--jp);font-weight:700}
+.cktbl tr.ok td.v{color:var(--muted)}
+.ckscroll{max-height:420px;overflow:auto;border:1px solid var(--edge);border-radius:4px}
+.ckrow{display:flex;gap:12px;padding:6px 10px;border-top:1px solid var(--line);font-size:12.5px}
+.ckrow:first-child{border-top:none}
+.ckrow b{flex:0 0 auto;min-width:210px}
+.ckrow span{color:var(--muted)}
 .intabs{display:flex;gap:6px;margin:0 0 16px;flex-wrap:wrap}
 .fsum .off{font-weight:400;color:var(--muted)}
 #fa_msg,#fb_msg{white-space:pre-wrap;margin-top:10px;text-align:left;padding:0 2px}
@@ -747,6 +765,8 @@ function build(raw){
   const crowns=computeCrowns(runs);
   const awards=computeAwards(horses,runs,years,rivals,crowns);
   return { horses, runs, byHorse, years, awards, rivals, races, jockeys, trainers,
+           // データ点検では数値に直す前の文字列が要るので、読んだままの行も渡す
+           rows:d,
            jockeyMeta, trainerMeta, crowns, raceMaster:d.raceMaster };
 }
 
@@ -2204,6 +2224,7 @@ const PORTAL_LINKS=[
   ['#/map','地図','競馬場ごとの成績を地図に並べる'],
   ['#/records','記録','日本・アメリカ・欧州の記録'],
   ['#/input','入力','出走登録・結果入力・新馬登録'],
+  ['#/check','データ点検','列のずれや打ち間違いを洗い出す'],
 ];
 
 function viewPortal(){
@@ -2500,6 +2521,154 @@ function inResult(){
   return s;
 }
 
+
+
+/* ============ データ点検 ============ */
+// 列がひとつずれて入力される事故が何度か起きたため、機械的に見つけられる
+// おかしな値をまとめて洗い出す。数値に直す前の文字列（DB.rows）を見る。
+const CK_SURF=['芝','ダート'];
+const CK_COND=['良','稍重','重','不良'];
+const CK_TIME=/^\d{0,2}\.?\d{1,2}\.\d$|^\d{1,2}\.\d$/;
+const numOnly=v=>/^\d+$/.test(String(v==null?'':v).trim());
+
+// 「1.34.5(勝ち馬)」を本体と勝ち馬に分ける
+function splitTime(v){
+  const raw=String(v==null?'':v).trim();
+  const m=raw.match(/^(.*?)[(（]([^)）]*)[)）]\s*$/);
+  return { base:(m?m[1]:raw).trim(), winner:m?m[2].trim():'' };
+}
+
+function runChecks(){
+  const R=(DB.rows&&DB.rows.results)||[];
+  const out=[];
+  const add=(cat,hint,list)=>out.push({cat,hint,list});
+  const at=r=>(r['年月日']||'')+' '+(r['馬名']||'')+' / '+(r['レース名']||'');
+
+  const bad=(col,ok)=>R.filter(r=>!ok((r[col]||'').trim()))
+    .map(r=>({where:at(r), detail:col+' = 「'+(r[col]||'')+'」'}));
+
+  add('馬場','芝かダートのどちらかです。状態（良・稍重…）が入っていないか確かめてください。',
+      bad('馬場',v=>CK_SURF.indexOf(v)>=0));
+  add('状態','良・稍重・重・不良のいずれかです。',
+      bad('状態',v=>CK_COND.indexOf(v)>=0));
+  add('距離','3桁か4桁の数字です。',
+      bad('距離',v=>/^\d{3,4}$/.test(v)));
+  add('人気','空欄か数字です。',
+      bad('人気',v=>v===''||/^\d{1,2}$/.test(v)));
+  add('着順','空欄か数字です。',
+      bad('着順',v=>v===''||/^\d{1,2}$/.test(v)));
+  add('騎手','人名です。数字が入っていれば、賞金を1つ左のセルに入れた可能性があります。',
+      bad('騎手',v=>v!==''&&!/[0-9０-９]/.test(v)));
+  add('賞金','空欄か数字です。',
+      bad('賞金',v=>v===''||numOnly(v)));
+  add('タイム','「1.34.5」か「58.8」の形です。負けたレースは後ろに（勝ち馬）が付きます。',
+      R.filter(r=>{ const t=splitTime(r['タイム']); return t.base && !CK_TIME.test(t.base); })
+       .map(r=>({where:at(r), detail:'タイム = 「'+(r['タイム']||'')+'」'})));
+
+  // レース単位の整合。同じレースならタイムと勝ち馬は同じ値になるはず
+  const g=new Map();
+  for(const r of R){
+    const k=[r['年月日'],r['場所'],r['レース名'],r['距離']].join('|');
+    if(!g.has(k)) g.set(k,[]);
+    g.get(k).push(r);
+  }
+  const mix=[], twin=[];
+  for(const [k,v] of g){
+    if(v.length<2) continue;
+    const bases=new Set(), wins=new Set();
+    for(const r of v){ const t=splitTime(r['タイム']);
+      if(t.base) bases.add(t.base); if(t.winner) wins.add(t.winner); }
+    const w1=v.filter(r=>(r['着順']||'').trim()==='1').map(r=>r['馬名']);
+    const split=[], wrong=[];
+    // 値が割れているだけなら、同名の別レースということがある
+    if(bases.size>1) split.push('タイムが '+[...bases].join(' と ')+' に割れています');
+    if(wins.size>1) split.push('勝ち馬が '+[...wins].join(' と ')+' に割れています');
+    if(w1.length>1) split.push('1着が '+w1.length+'頭います');
+    // こちらは別レースでは説明できない矛盾
+    if(w1.length===1&&wins.size===1&&[...wins][0]!==w1[0]&&bases.size<=1)
+      wrong.push('1着は '+w1[0]+' なのに、勝ち馬に '+[...wins][0]+' が入っています');
+    if(v.some(r=>(r['着順']||'').trim()==='1'&&splitTime(r['タイム']).winner))
+      wrong.push('1着の行に勝ち馬名が付いています');
+    for(const r of v){ const t=splitTime(r['タイム']);
+      if(t.winner&&t.winner===r['馬名']) wrong.push(r['馬名']+' の勝ち馬が自分自身になっています'); }
+    const where=k.split('|').slice(0,3).join(' ');
+    if(wrong.length) mix.push({where:where, detail:wrong.join('／')});
+    // 「2歳新馬」などは同じ日・同じ場所に何本も組まれる。値が割れていても誤りとは限らない
+    else if(split.length){
+      const generic=GENERIC_RACE.test((v[0]['レース名']||'').trim());
+      (generic?twin:mix).push({where:where, detail:split.join('／')});
+    }
+  }
+  add('レース内の食い違い','同じレースに出した馬どうしで、タイムや勝ち馬がそろっていません。',mix);
+  add('同名の別レースかも','「2歳新馬」などは同じ日・同じ競馬場に何本も組まれます。'
+    +'別のレースなら問題ありません。念のための確認用です。',twin);
+
+  // 賞金が着順のレートと合わない
+  const pz=[];
+  for(const [k,v] of g){
+    const w=v.find(r=>(r['着順']||'').trim()==='1'&&numOnly(r['賞金']));
+    if(!w) continue;
+    const win=+w['賞金'], rt=rateOf(v[0]['G'],v[0]['場所']);
+    for(const r of v){
+      const rank=+(r['着順']||0);
+      if(!(rank>=1&&rank<=5)||!numOnly(r['賞金'])) continue;
+      const want=rank===1?win:Math.round(win*rt[rank]);
+      if(+r['賞金']!==want)
+        pz.push({where:at(r), detail:rank+'着の賞金 '+num(+r['賞金'])+' ／ 1着 '+num(win)+' からの計算では '+num(want)});
+    }
+  }
+  add('賞金の計算','1着賞金と着順から出る金額と違います。',pz);
+
+  // 結果にいるのに馬のシートにいない
+  const unknown=[...new Set(R.map(r=>nm((r['馬名']||'').trim())).filter(Boolean))]
+    .filter(n=>!DB.horses.has(n))
+    .map(n=>({where:n, detail:'レース結果にありますが、馬のシートに見当たりません'}));
+  add('登録のない馬','馬名の打ち間違いか、登録もれです。',unknown);
+
+  // 生年がおかしい馬
+  const yr=[];
+  for(const h of DB.horses.values()){
+    if(!h.birth) continue;
+    const b=+h.birth;
+    if(!(b>=1900&&b<=2100)) yr.push({where:h.name, detail:'生年 = 「'+h.birth+'」'});
+  }
+  add('生年','年として読めません。',yr);
+
+  return out;
+}
+
+function viewCheck(){
+  const all=runChecks();
+  const total=all.reduce((t,c)=>t+c.list.length,0);
+  let s='<h1>データ点検</h1><div class="sub">'
+    +'列がひとつずれて入力された値など、機械的に見つけられるおかしな値を探します。'
+    +'シートを読み直すたびに実行されます。</div>';
+
+  s+='<div class="card"><div class="ckhead '+(total?'ng':'ok')+'">'
+    +(total? '⚠️ '+num(total)+'件の気になる値があります'
+           : '✅ 気になる値はありません')
+    +'<span>'+num(((DB.rows&&DB.rows.results)||[]).length)+'行を点検しました</span></div>'
+    +'<table class="cktbl"><tbody>'
+    +all.map(c=>'<tr class="'+(c.list.length?'ng':'ok')+'">'
+      +'<td class="c">'+esc(c.cat)+'</td>'
+      +'<td class="v">'+(c.list.length? c.list.length+'件' : '—')+'</td>'
+      +'<td class="d">'+esc(c.hint)+'</td></tr>').join('')
+    +'</tbody></table></div>';
+
+  for(const c of all){
+    if(!c.list.length) continue;
+    s+='<div class="card"><h2>'+esc(c.cat)+'（'+c.list.length+'件）</h2>'
+      +'<div class="note" style="margin-bottom:10px">'+esc(c.hint)+'</div>'
+      +'<div class="ckscroll">'+c.list.slice(0,200).map(x=>
+        '<div class="ckrow"><b>'+esc(x.where)+'</b><span>'+esc(x.detail)+'</span></div>').join('')
+      +'</div>'
+      +(c.list.length>200?'<div class="note">…ほか'+(c.list.length-200)+'件</div>':'')
+      +'</div>';
+  }
+  if(!total) s+='<div class="card"><div class="note">'
+    +'点検している内容は上の表のとおりです。新しく確かめたい項目があれば足せます。</div></div>';
+  return s;
+}
 
 /* ---- ④ 去就（引退判定と繁殖引退） ---- */
 // 一覧はサイトが読み込み済みのシートから作る。APIは書き込みのときだけ使う
@@ -3376,6 +3545,7 @@ function render(){
   else if(hash.startsWith('#/courses')){ app.innerHTML=viewCourses(); bindCourses(); route='courses'; }
   else if(hash==='#/'||hash===''||hash==='#'){ app.innerHTML=viewPortal(); route='portal'; }
   else if(hash.startsWith('#/input')){ app.innerHTML=viewInput(); bindInput(); route='input'; }
+  else if(hash.startsWith('#/check')){ app.innerHTML=viewCheck(); route='check'; }
   else if(hash.startsWith('#/legends')){ app.innerHTML=viewLegends(); bindLegends(); route='legends'; }
   else if(hash.startsWith('#/map')){ app.innerHTML=viewMap(); bindMap(); route='map'; }
   else if(hash.startsWith('#/records')){ app.innerHTML=viewRecords(); bindRecords(); route='records'; }
