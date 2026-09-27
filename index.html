@@ -450,6 +450,7 @@ svg.map{display:block;width:100%;height:auto;border-radius:3px;background:var(--
     <a href="#/map" data-r="map">地図</a>
     <a href="#/records" data-r="records">記録</a>
     <a href="#/input" data-r="input">入力</a>
+    <a href="#/check" data-r="check">点検</a>
   </nav>
   <div class="search">
     <input id="q" type="search" placeholder="馬名で検索…" autocomplete="off">
@@ -1247,9 +1248,11 @@ function bindHorses(){
   const g=document.getElementById('hgrid'); if(!g) return;
   const re=()=>{ document.getElementById('app').innerHTML=viewHorses(); bindHorses();
                  const i=document.getElementById('lq'); if(i){ i.focus(); i.setSelectionRange(i.value.length,i.value.length);} };
-  const q=document.getElementById('lq');
-  q.oninput=e=>{ LF.q=e.target.value; document.getElementById('hgrid').innerHTML=viewHorses()
-    .split('<div class="grid" id="hgrid">')[1].replace(/<\/div>$/,''); };
+  // ここは一覧だけ差し替えるので入力欄は消えないが、変換中に絞り込むと
+  // ローマ字で検索されて一覧が空になるため、確定を待つ
+  bindSearch(document.getElementById('lq'), v=>{ LF.q=v;
+    document.getElementById('hgrid').innerHTML=viewHorses()
+      .split('<div class="grid" id="hgrid">')[1].replace(/<\/div>$/,''); });
   document.getElementById('lstatus').onchange=e=>{ LF.status=e.target.value; re(); };
   document.getElementById('lregion').onchange=e=>{ LF.region=e.target.value; re(); };
   // 項目を変えたら、その項目にとって自然な向きに戻す
@@ -1347,7 +1350,7 @@ function bindPedigree(){
     const redraw=()=>{ document.getElementById('pedbody').innerHTML=matingList(); bindPedigree();
       const i=document.getElementById('mq'); if(i&&MF.q){ i.focus(); i.setSelectionRange(i.value.length,i.value.length); } };
     const q=document.getElementById('mq');
-    if(q){ q.oninput=e=>{ MF.q=e.target.value; redraw(); };
+    if(q){ bindSearch(q,v=>{ MF.q=v; redraw(); });
       document.getElementById('msort').onchange=e=>{ MF.sort=e.target.value; redraw(); };
       document.getElementById('monly').onchange=e=>{ MF.only=e.target.checked; redraw(); }; }
   } else bindBreeding(PED.tab);
@@ -1411,7 +1414,7 @@ function bindBreeding(kind){
     const i=document.getElementById('bq'); if(i&&document.activeElement!==i&&f.q){ i.focus();
       i.setSelectionRange(i.value.length,i.value.length); } };
   const q=document.getElementById('bq'); if(!q) return;
-  q.oninput=e=>{ f.q=e.target.value; redraw(); };
+  bindSearch(q,v=>{ f.q=v; redraw(); });
   document.getElementById('bsort').onchange=e=>{ f.sort=e.target.value; redraw(); };
   document.getElementById('bonly').onchange=e=>{ f.only=e.target.checked; redraw(); };
 }
@@ -1603,7 +1606,7 @@ function bindPeople(kind){
     if(i&&f.q){ i.focus(); i.setSelectionRange(i.value.length,i.value.length); }
   };
   const q=document.getElementById('pq'); if(!q) return;
-  q.oninput=e=>{ f.q=e.target.value; redraw(); };
+  bindSearch(q,v=>{ f.q=v; redraw(); });
   document.getElementById('psort').onchange=e=>{ f.sort=e.target.value; redraw(); };
 }
 
@@ -1920,8 +1923,11 @@ function bindCourses(){
     document.getElementById('app').innerHTML=viewCourses(); bindCourses();
   });
   const redraw=()=>{ document.getElementById('tabbody').innerHTML=CF.tab==='venue'?venueList():raceList(); bindCourses(); };
-  const on=(id,fn)=>{ const e=document.getElementById(id); if(e) e[e.tagName==='INPUT'?'oninput':'onchange']=ev=>{ fn(ev.target.value); redraw();
-    const i=document.getElementById(id); if(i&&i.tagName==='INPUT'){ i.focus(); i.setSelectionRange(i.value.length,i.value.length); } }; };
+  const refocus=id=>{ const i=document.getElementById(id);
+    if(i&&i.tagName==='INPUT'){ i.focus(); i.setSelectionRange(i.value.length,i.value.length); } };
+  const on=(id,fn)=>{ const e=document.getElementById(id); if(!e) return;
+    if(e.tagName==='INPUT') bindSearch(e,v=>{ fn(v); redraw(); refocus(id); });
+    else e.onchange=ev=>{ fn(ev.target.value); redraw(); }; };
   on('vq',v=>CF.vq=v); on('vsort',v=>CF.vsort=v);
   on('rq',v=>CF.rq=v); on('rgrade',v=>CF.rgrade=v); on('rwon',v=>CF.rwon=v); on('rsort',v=>CF.rsort=v);
 }
@@ -2522,6 +2528,17 @@ function inResult(){
 }
 
 
+
+/* 検索欄の入力を拾う。変換中（IME）は描き直さない。
+   途中で入力欄ごと作り直すと変換が打ち切られ、ローマ字のまま確定してしまう */
+function bindSearch(el, fn){
+  if(!el) return;
+  let composing=false, last=null;
+  const run=v=>{ if(v===last) return; last=v; fn(v); };
+  el.addEventListener('compositionstart',()=>{ composing=true; });
+  el.addEventListener('compositionend',ev=>{ composing=false; run(ev.target.value); });
+  el.addEventListener('input',ev=>{ if(composing||ev.isComposing) return; run(ev.target.value); });
+}
 
 /* ============ データ点検 ============ */
 // 列がひとつずれて入力される事故が何度か起きたため、機械的に見つけられる
