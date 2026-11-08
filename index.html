@@ -2300,12 +2300,11 @@ async function api(action,extra){
 }
 
 // 画面を描き直しても入力が消えないよう、フォームの中身は状態として持つ
-const IN={tab:'entry',cart:[],pending:null,cands:[],init:null,busy:false,
+const IN={tab:'entry',cart:[],pending:null,cands:[],busy:false,
           meet:{year:'',month:'',week:''},
           race:{place:'',raceName:'',raceNo:'',grade:'G1',dist:'',
                 trackType:'芝',trackCond:'良',winPrize:'',known:null},
           horse:'',jockey:'',
-          opts:null,
           nh:{name:'',birth:'',color:'鹿毛',sex:'牡',sire:'',dam:'',trainer:'',base:'栗東'},
           nhForce:false, nhCart:[],
           fate:{region:'日本', filter:'all', sel:{}, dest:{}, year:'',
@@ -2379,9 +2378,37 @@ function viewInput(){
     +'<a class="link" href="#" id="tokReset">こちら</a>。</div>';
 }
 
+/* GASへの問い合わせは1往復およそ2秒かかる。馬の一覧・競馬場・父母の候補は
+   どれもサイトが読み込み済みのシートにあるので、通信せずその場で作る。
+   シートの文字をそのまま使うため、書き込むときの照合もずれない */
+const colOf=(rows,col)=>[...new Set((rows||[]).map(r=>String(r[col]||'').trim()).filter(Boolean))];
+const inHorseNames=()=>colOf(DB&&DB.rows&&DB.rows.active,'馬名');
+const inPlaces=()=>colOf(DB&&DB.rows&&DB.rows.raceMaster,'場所');
+const YEAR_KEY='wp-last-year';
+// 前回登録した年を覚えておく。結果がまだ1行も無い年でも初期値にできる
+const inLastYear=()=>{
+  try{ const v=localStorage.getItem(YEAR_KEY); if(v) return v; }catch(e){}
+  return DB&&DB.years.length?String(Math.max.apply(null,DB.years)):'';
+};
+const saveLastYear=y=>{ try{ localStorage.setItem(YEAR_KEY,String(y)); }catch(e){} };
+function inOptions(){
+  const R=(DB&&DB.rows)||{};
+  const pick=(rows,col)=>colOf(rows,col);
+  const uniq=a=>[...new Set(a)].sort((x,y)=>x.localeCompare(y,'ja'));
+  return {
+    sires:   uniq([].concat(pick(R.active,'父'),pick(R.retired,'父'),pick(R.stallion,'父'),
+                            pick(R.broodmare,'父'),pick(R.form,'父'),pick(R.stallion,'馬名'))),
+    dams:    uniq([].concat(pick(R.active,'母'),pick(R.retired,'母'),pick(R.stallion,'母'),
+                            pick(R.broodmare,'母'),pick(R.form,'母'),pick(R.broodmare,'馬名'))),
+    trainers:uniq([].concat(pick(R.active,'調教師'),pick(R.form,'調教師'))),
+    bases:   uniq([].concat(pick(R.active,'所属'),pick(R.form,'所属'))),
+    colors:  uniq([].concat(pick(R.active,'毛色'),pick(R.form,'毛色'))),
+  };
+}
+
 /* ---- ① 出走登録 ---- */
 function inEntry(){
-  const m=IN.meet, r=IN.race, horses=(IN.init&&IN.init.horses)||[];
+  const m=IN.meet, r=IN.race, horses=inHorseNames();
   let s='<div class="card"><h2>1. 開催</h2><div class="inrow">'
     +fld('e_year','年','type="number" inputmode="numeric" value="'+esc(m.year)+'"')
     +fld('e_month','月','type="number" inputmode="numeric" value="'+esc(m.month)+'"')
@@ -2415,7 +2442,7 @@ function inEntry(){
           +'ここに入れておくと、結果入力で賞金が自動になります。')
     +'</div>'
     +'<datalist id="place-list">'
-    +((IN.init&&IN.init.places)||[]).map(p=>'<option value="'+esc(p)+'">').join('')
+    +inPlaces().map(p=>'<option value="'+esc(p)+'">').join('')
     +'</datalist></div>';
 
   s+='<div class="card"><h2>3. 出走する馬</h2><div class="inrow">'
@@ -2861,7 +2888,7 @@ function inFate(){
 // 父・母・調教師は既に使われている名前を候補に出す。
 // Googleフォームではできなかった部分で、血統がつながらない事故を防ぐのが狙い。
 function inHorse(){
-  const h=IN.nh, o=IN.opts||{sires:[],dams:[],trainers:[],bases:[],colors:[]};
+  const h=IN.nh, o=inOptions();
   const list=(id,arr)=>'<datalist id="'+id+'">'
     +arr.map(x=>'<option value="'+esc(x)+'">').join('')+'</datalist>';
   const colors=[...new Set(IN_COLORS.concat(o.colors||[]))];
@@ -2987,6 +3014,7 @@ function inBindBody(){
       if(!IN.cart.length) return;
       busy(e.target,'登録中…',()=>api('registerEntries',
         {payload:{year:m.year,month:m.month,week:m.week,entries:IN.cart}}).then(j=>{
+          saveLastYear(m.year);
           IN.cart=[]; IN.pending=null; inMsg(j.message,true); inRender(); }));
     });
   } else if(IN.tab==='horse'){
@@ -3027,16 +3055,15 @@ function inBindBody(){
     on('h_submit','click',e=>{
       if(!IN.nhCart.length) return;
       busy(e.target,'登録中…',()=>api('registerHorses',{horses:IN.nhCart}).then(j=>{
-        IN.nhCart=[]; IN.init=null; IN.opts=null;
+        IN.nhCart=[];
         inMsg(j.message+'\n最新のデータを読み直しています…',true);
-        return reloadData()
-          .then(()=>api('init')).then(r=>{ IN.init=r.data; })
-          .then(()=>api('horseOptions')).then(r=>{ IN.opts=r.data;
-            inMsg(j.message+'\nサイトに反映しました',true); inRender(); });
+        // 候補も馬の一覧もシートから作っているので、読み直すだけで新しくなる
+        return reloadData().then(()=>{
+          inMsg(j.message+'\nサイトに反映しました',true); inRender(); });
       }));
     });
   } else if(IN.tab==='fate'){
-    const reload=(id,msg)=>{ IN.init=null;
+    const reload=(id,msg)=>{
       fateMsg(id,msg+'\n最新のデータを読み直しています…',true);
       inMsg(msg,true);
       return reloadData().then(()=>{ inRender();
@@ -3152,19 +3179,15 @@ function bindInput(){
     document.getElementById('app').innerHTML=viewInput(); bindInput(); };
 
   // 馬と競馬場の一覧は一度だけ取る。年は前回登録した値を初期値にする
-  const start=IN.init?Promise.resolve():api('init').then(j=>{
-    IN.init=j.data;
-    if(!IN.meet.year&&j.data&&j.data.lastYear) IN.meet.year=String(j.data.lastYear);
-  });
-  start.then(()=>{
-    if(IN.tab==='result'&&!IN.pending)
-      return api('getPending').then(j=>{ IN.pending=splitPending(j.data); });
-    if(IN.tab==='horse'&&!IN.opts)
-      return api('horseOptions').then(j=>{ IN.opts=j.data; });
-  }).then(inRender)
-    .catch(err=>{ const b=$('inbody');
-      if(b) b.innerHTML='<div class="card"><div class="mapempty">つながりませんでした。<br>'
-        +esc(err.message)+'</div></div>'; });
+  // 馬の一覧も競馬場も手元にあるので、まず画面を出してしまう。
+  // 通信が要るのは②の仮登録だけで、それも裏で取りに行く
+  if(!IN.meet.year) IN.meet.year=inLastYear();
+  inRender();
+  if(IN.tab==='result'&&!IN.pending){
+    inMsg('仮登録中のレースを読み込んでいます…',true);
+    api('getPending').then(j=>{ IN.pending=splitPending(j.data); inMsg(''); inRender(); })
+      .catch(err=>inMsg('⚠️ '+err.message,false));
+  }
 }
 
 /* ============ 画面: 名馬列伝 ============ */
